@@ -28,7 +28,7 @@ const CoachDashboard = () => {
   const [hamburgerMenuOpen, setHamburgerMenuOpen] = useState(false);
   
   // Navigation state
-  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' or 'rhwb-connect'
+  const [currentView, setCurrentView] = useState('rhwb-connect'); // 'dashboard' or 'rhwb-connect'
 
   // Get unique filter options from data
   // Store all data and filter options
@@ -420,16 +420,6 @@ const CoachDashboard = () => {
               {/* Desktop Navigation Tabs */}
               <div className="hidden lg:flex items-center space-x-1 ml-8">
                 <button
-                  onClick={() => setCurrentView('dashboard')}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
-                    currentView === 'dashboard'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  RHWB Connect
-                </button>
-                <button
                   onClick={() => setCurrentView('rhwb-connect')}
                   className={`px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
                     currentView === 'rhwb-connect'
@@ -438,6 +428,16 @@ const CoachDashboard = () => {
                   }`}
                 >
                   OneRHWB
+                </button>
+                <button
+                  onClick={() => setCurrentView('dashboard')}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
+                    currentView === 'dashboard'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  Runner Metrics
                 </button>
               </div>
             </div>
@@ -458,19 +458,6 @@ const CoachDashboard = () => {
             <div className="space-y-2">
               <button
                 onClick={() => {
-                  setCurrentView('dashboard');
-                  setHamburgerMenuOpen(false);
-                }}
-                className={`w-full text-left px-4 py-3 rounded-lg transition-colors duration-200 font-medium ${
-                  currentView === 'dashboard' 
-                    ? 'bg-blue-50 text-blue-700' 
-                    : 'text-gray-700 hover:bg-gray-50 hover:text-blue-600'
-                }`}
-              >
-                RHWB Connect
-              </button>
-              <button
-                onClick={() => {
                   setCurrentView('rhwb-connect');
                   setHamburgerMenuOpen(false);
                 }}
@@ -481,6 +468,19 @@ const CoachDashboard = () => {
                 }`}
               >
                 OneRHWB
+              </button>
+              <button
+                onClick={() => {
+                  setCurrentView('dashboard');
+                  setHamburgerMenuOpen(false);
+                }}
+                className={`w-full text-left px-4 py-3 rounded-lg transition-colors duration-200 font-medium ${
+                  currentView === 'dashboard' 
+                    ? 'bg-blue-50 text-blue-700' 
+                    : 'text-gray-700 hover:bg-gray-50 hover:text-blue-600'
+                }`}
+              >
+                Runner Metrics
               </button>
             </div>
           </div>

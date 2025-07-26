@@ -407,10 +407,10 @@ const RHWBConnect = () => {
         <div className="text-center mb-8 sm:mb-12">
           <div className="mb-6 sm:mb-8">
             <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 mb-2">
-              RHWB Connect
+              OneRHWB
             </h2>
             <p className="text-gray-600">
-              Search by name or email address
+              All Seasons History. Search by Name or Email address.
             </p>
           </div>
           <SearchBar onRunnerSelect={handleRunnerSelect} />
@@ -422,13 +422,6 @@ const RHWBConnect = () => {
           onRunnerSelect={handleRunnerSelectByEmail}
         />
       </main>
-      <footer className="bg-white border-t mt-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <p className="text-center text-gray-500">
-            © 2024 RHWB Connect. All rights reserved.
-          </p>
-        </div>
-      </footer>
     </div>
   );
 };
