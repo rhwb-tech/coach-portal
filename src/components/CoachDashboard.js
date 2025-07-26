@@ -6,9 +6,9 @@ import { useAuth } from '../contexts/AuthContext';
 const CoachDashboard = () => {
   const { user, isLoading } = useAuth();
   
-  // Get coach email from JWT token or fallback to URL parameter
+  // Get coach email from JWT token or URL parameter
   const urlParams = new URLSearchParams(window.location.search);
-  const coachEmail = user?.email || urlParams.get('coach') || 'balajisankaran@gmail.com';
+  const coachEmail = user?.email || urlParams.get('coach');
   const season = parseInt(urlParams.get('season')) || 13;
 
   const [selectedDistance, setSelectedDistance] = useState('All');
@@ -73,6 +73,17 @@ const CoachDashboard = () => {
 
     loadAllData();
   }, [coachEmail, season]);
+
+  // Handle redirect to Wix website when no authentication
+  useEffect(() => {
+    if (!isLoading && !coachEmail) {
+      const redirectTimer = setTimeout(() => {
+        window.location.href = 'https://www.rhwb.org/coach-portal';
+      }, 3000); // 3 second delay
+
+      return () => clearTimeout(redirectTimer);
+    }
+  }, [isLoading, coachEmail]);
 
   const distanceOptions = filterOptions.distances;
   
@@ -329,6 +340,33 @@ const CoachDashboard = () => {
   // Show loading state while auth is initializing
   if (isLoading) {
     return <div className="text-center py-8">Initializing...</div>;
+  }
+
+  // Check if coach email is available
+  if (!coachEmail) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
+        <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-8 shadow-lg border border-gray-200 max-w-md mx-4">
+          <div className="text-center">
+            <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-4 rounded-xl mb-6">
+              <TrendingUp className="h-12 w-12 text-white mx-auto" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">Authentication Required</h1>
+            <p className="text-gray-600 mb-6">
+              You need to authenticate to access the Coach Portal. Please log in through the official RHWB website.
+            </p>
+            <div className="bg-blue-50 rounded-lg p-4 mb-6">
+              <p className="text-sm text-blue-700">
+                Redirecting to <a href="https://www.rhwb.org/coach-portal" className="font-semibold underline">RHWB Coach Portal</a> in 3 seconds...
+              </p>
+            </div>
+            <div className="flex justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // Show loading state while data is loading
