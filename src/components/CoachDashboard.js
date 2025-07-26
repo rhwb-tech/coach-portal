@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Info, Save, TrendingUp, Users, Calendar, ChevronDown } from 'lucide-react';
+import { Search, Info, Save, TrendingUp, Users, Calendar, ChevronDown, Menu, X } from 'lucide-react';
 import { fetchCoachData, updateAthleteData, calculateCompletionRate, getAvatarInitials } from '../services/coachService';
 import { useAuth } from '../contexts/AuthContext';
+import RHWBConnect from './RHWBConnect';
 
 const CoachDashboard = () => {
   const { user, isLoading } = useAuth();
@@ -24,6 +25,10 @@ const CoachDashboard = () => {
   // Dropdown menu states
   const [distanceMenuOpen, setDistanceMenuOpen] = useState(false);
   const [mesoMenuOpen, setMesoMenuOpen] = useState(false);
+  const [hamburgerMenuOpen, setHamburgerMenuOpen] = useState(false);
+  
+  // Navigation state
+  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' or 'rhwb-connect'
 
   // Get unique filter options from data
   // Store all data and filter options
@@ -239,6 +244,9 @@ const CoachDashboard = () => {
         setDistanceMenuOpen(false);
         setMesoMenuOpen(false);
       }
+      if (!event.target.closest('.hamburger-menu')) {
+        setHamburgerMenuOpen(false);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -389,24 +397,52 @@ const CoachDashboard = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-3">
+              {/* Hamburger Menu Button */}
+              <button
+                onClick={() => setHamburgerMenuOpen(!hamburgerMenuOpen)}
+                className="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 lg:hidden hamburger-menu"
+              >
+                {hamburgerMenuOpen ? (
+                  <X className="h-6 w-6 text-gray-600" />
+                ) : (
+                  <Menu className="h-6 w-6 text-gray-600" />
+                )}
+              </button>
+              
               <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-2 rounded-xl">
                 <TrendingUp className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Coach Dashboard</h1>
-                <p className="text-sm text-gray-600">Track your runners' progress</p>
+                <h1 className="text-xl font-bold text-gray-900">RHWB Connect</h1>
+                <p className="text-sm text-gray-600">Smarter Coaching. Stronger Community</p>
+              </div>
+              
+              {/* Desktop Navigation Tabs */}
+              <div className="hidden lg:flex items-center space-x-1 ml-8">
+                <button
+                  onClick={() => setCurrentView('dashboard')}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
+                    currentView === 'dashboard'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  RHWB Connect
+                </button>
+                <button
+                  onClick={() => setCurrentView('rhwb-connect')}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
+                    currentView === 'rhwb-connect'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  OneRHWB
+                </button>
               </div>
             </div>
             
             <div className="flex items-center space-x-4">
-              <div className="hidden sm:flex items-center space-x-2 text-sm text-gray-600">
-                <Users className="h-4 w-4" />
-                <span>{filteredRunners.length} Athletes</span>
-              </div>
-              <div className="flex items-center space-x-2 text-sm text-gray-600">
-                <Calendar className="h-4 w-4" />
-                <span>Season {season}</span>
-              </div>
               <div className="hidden md:flex items-center space-x-2 text-sm text-gray-600">
                 <span>Coach: {user?.name || user?.email || allAthletes[0]?.coach || 'Unknown'}</span>
               </div>
@@ -415,9 +451,46 @@ const CoachDashboard = () => {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Filters */}
-        <div className="mb-8 relative z-30">
+      {/* Hamburger Menu Dropdown */}
+      {hamburgerMenuOpen && (
+        <div className="lg:hidden absolute top-16 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-gray-200 shadow-lg z-[60] hamburger-menu">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="space-y-2">
+              <button
+                onClick={() => {
+                  setCurrentView('dashboard');
+                  setHamburgerMenuOpen(false);
+                }}
+                className={`w-full text-left px-4 py-3 rounded-lg transition-colors duration-200 font-medium ${
+                  currentView === 'dashboard' 
+                    ? 'bg-blue-50 text-blue-700' 
+                    : 'text-gray-700 hover:bg-gray-50 hover:text-blue-600'
+                }`}
+              >
+                RHWB Connect
+              </button>
+              <button
+                onClick={() => {
+                  setCurrentView('rhwb-connect');
+                  setHamburgerMenuOpen(false);
+                }}
+                className={`w-full text-left px-4 py-3 rounded-lg transition-colors duration-200 font-medium ${
+                  currentView === 'rhwb-connect' 
+                    ? 'bg-blue-50 text-blue-700' 
+                    : 'text-gray-700 hover:bg-gray-50 hover:text-blue-600'
+                }`}
+              >
+                OneRHWB
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {currentView === 'dashboard' ? (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Filters */}
+          <div className="mb-8 relative z-30">
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-sm border border-gray-200">
             <div className="flex flex-col gap-4">
               {/* Filter Chips */}
@@ -647,6 +720,9 @@ const CoachDashboard = () => {
           ))}
         </div>
       </div>
+      ) : (
+        <RHWBConnect />
+      )}
     </div>
   );
 };
