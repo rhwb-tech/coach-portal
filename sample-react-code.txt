@@ -1,0 +1,396 @@
+import React, { useState } from 'react';
+import { Search, Filter, Info, Save, Check, AlertCircle, TrendingUp, Users, Calendar } from 'lucide-react';
+
+const RunningCoachApp = () => {
+  const [selectedDistance, setSelectedDistance] = useState('5K');
+  const [selectedMeso, setSelectedMeso] = useState('Meso 1');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [editingCards, setEditingCards] = useState({});
+  const [cardData, setCardData] = useState({});
+
+  const runners = [
+    {
+      id: 1,
+      name: "Tarun Ganesan",
+      avatar: "TG",
+      strengthPlanned: 6,
+      strengthCompleted: 0,
+      mileagePlanned: 37,
+      mileageCompleted: 26,
+      metricScore: 2.9,
+      overrideScore: null,
+      qualitativeScore: "Good start for the season but missing several runs and not logging strength training. You are doing a great job trying to understand how to control your runs but you need to get some training consistency to make progress.",
+      completionRate: 70
+    },
+    {
+      id: 2,
+      name: "Kolar Jayaram",
+      avatar: "KJ",
+      strengthPlanned: 0,
+      strengthCompleted: 2,
+      mileagePlanned: 12,
+      mileageCompleted: 23,
+      metricScore: 5.0,
+      overrideScore: null,
+      qualitativeScore: "You are incredible uncle. I love how dedicated you are to keeping up with the training plan.",
+      completionRate: 95
+    },
+    {
+      id: 3,
+      name: "Pushpa Jayaram",
+      avatar: "PJ",
+      strengthPlanned: 0,
+      strengthCompleted: 4,
+      mileagePlanned: 0,
+      mileageCompleted: 0,
+      metricScore: 5.0,
+      overrideScore: null,
+      qualitativeScore: "You are an inspiration aunty. Amazing consistency and not missing anything",
+      completionRate: 100
+    }
+  ];
+
+  const getScoreColor = (score) => {
+    if (score >= 4.5) return 'text-emerald-600';
+    if (score >= 3.5) return 'text-yellow-600';
+    if (score >= 2.5) return 'text-orange-600';
+    return 'text-red-600';
+  };
+
+  const getScoreRingColor = (score) => {
+    if (score >= 4.5) return 'stroke-emerald-500';
+    if (score >= 3.5) return 'stroke-yellow-500';
+    if (score >= 2.5) return 'stroke-orange-500';
+    return 'stroke-red-500';
+  };
+
+  const getCompletionColor = (rate) => {
+    if (rate >= 90) return 'bg-emerald-500';
+    if (rate >= 70) return 'bg-yellow-500';
+    if (rate >= 50) return 'bg-orange-500';
+    return 'bg-red-500';
+  };
+
+  const handleEdit = (runnerId) => {
+    setEditingCards(prev => ({ ...prev, [runnerId]: true }));
+    const runner = runners.find(r => r.id === runnerId);
+    setCardData(prev => ({
+      ...prev,
+      [runnerId]: {
+        overrideScore: runner.overrideScore || '',
+        qualitativeScore: runner.qualitativeScore || ''
+      }
+    }));
+  };
+
+  const handleSave = (runnerId) => {
+    setEditingCards(prev => ({ ...prev, [runnerId]: false }));
+    // Here you would typically save to your backend
+    console.log('Saving data for runner:', runnerId, cardData[runnerId]);
+  };
+
+  const handleCancel = (runnerId) => {
+    setEditingCards(prev => ({ ...prev, [runnerId]: false }));
+    setCardData(prev => {
+      const { [runnerId]: removed, ...rest } = prev;
+      return rest;
+    });
+  };
+
+  const updateCardData = (runnerId, field, value) => {
+    setCardData(prev => ({
+      ...prev,
+      [runnerId]: {
+        ...prev[runnerId],
+        [field]: value
+      }
+    }));
+  };
+
+  const filteredRunners = runners.filter(runner =>
+    runner.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const InfoTooltip = ({ children, tooltip }) => {
+    const [showTooltip, setShowTooltip] = useState(false);
+
+    return (
+      <div className="relative inline-block">
+        <div 
+          className="flex items-center space-x-1 cursor-help"
+          onMouseEnter={() => setShowTooltip(true)}
+          onMouseLeave={() => setShowTooltip(false)}
+        >
+          {children}
+          <Info className="h-3 w-3 text-gray-400" />
+        </div>
+        {showTooltip && (
+          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-xs text-white bg-gray-900 rounded-lg whitespace-nowrap z-10">
+            {tooltip}
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const MetricScoreRing = ({ score }) => {
+    const circumference = 2 * Math.PI * 20;
+    const strokeDasharray = circumference;
+    const strokeDashoffset = circumference - (score / 5) * circumference;
+
+    return (
+      <div className="relative">
+        <svg className="w-16 h-16 transform -rotate-90" viewBox="0 0 44 44">
+          <circle
+            cx="22"
+            cy="22"
+            r="20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            className="text-gray-200"
+          />
+          <circle
+            cx="22"
+            cy="22"
+            r="20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeDasharray={strokeDasharray}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+            className={getScoreRingColor(score)}
+          />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className={`text-lg font-bold ${getScoreColor(score)}`}>
+            {score.toFixed(1)}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      {/* Header */}
+      <div className="bg-white/90 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center space-x-3">
+              <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-2 rounded-xl">
+                <TrendingUp className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">Coach Dashboard</h1>
+                <p className="text-sm text-gray-600">Track your runners' progress</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              <div className="hidden sm:flex items-center space-x-2 text-sm text-gray-600">
+                <Users className="h-4 w-4" />
+                <span>{runners.length} Athletes</span>
+              </div>
+              <div className="flex items-center space-x-2 text-sm text-gray-600">
+                <Calendar className="h-4 w-4" />
+                <span>Week 12</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Filters */}
+        <div className="mb-8">
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-sm border border-gray-200">
+            <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center">
+              <div className="flex items-center space-x-2 text-gray-700 font-medium">
+                <Filter className="h-5 w-5" />
+                <span>Filters</span>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-4 flex-1">
+                <div className="flex-1 sm:max-w-xs">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Race Distance</label>
+                  <select 
+                    value={selectedDistance}
+                    onChange={(e) => setSelectedDistance(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white/80"
+                  >
+                    <option value="5K">5K</option>
+                    <option value="10K">10K</option>
+                    <option value="Half Marathon">Half Marathon</option>
+                    <option value="Marathon">Marathon</option>
+                  </select>
+                </div>
+                
+                <div className="flex-1 sm:max-w-xs">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Mesocycle</label>
+                  <select 
+                    value={selectedMeso}
+                    onChange={(e) => setSelectedMeso(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white/80"
+                  >
+                    <option value="Meso 1">Meso 1</option>
+                    <option value="Meso 2">Meso 2</option>
+                    <option value="Meso 3">Meso 3</option>
+                    <option value="Meso 4">Meso 4</option>
+                  </select>
+                </div>
+                
+                <div className="flex-1 sm:max-w-xs">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Search Athletes</label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                    <input
+                      type="text"
+                      placeholder="Search by name..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white/80"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Runner Cards Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          {filteredRunners.map((runner) => (
+            <div key={runner.id} className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-300">
+              {/* Card Header */}
+              <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-6 text-white">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center text-white font-bold">
+                      {runner.avatar}
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">{runner.name}</h3>
+                      <div className="flex items-center space-x-2 text-sm opacity-90">
+                        <span>Completion Rate:</span>
+                        <div className="flex items-center space-x-1">
+                          <div className="w-16 h-2 bg-white/20 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full ${getCompletionColor(runner.completionRate)} transition-all duration-500`}
+                              style={{ width: `${runner.completionRate}%` }}
+                            />
+                          </div>
+                          <span className="font-medium">{runner.completionRate}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <MetricScoreRing score={runner.metricScore} />
+                </div>
+              </div>
+
+              {/* Card Body */}
+              <div className="p-6">
+                {/* Training Metrics */}
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="bg-blue-50 rounded-xl p-4">
+                    <InfoTooltip tooltip="Number of strength training sessions planned">
+                      <div className="text-sm text-blue-600 font-medium">Strength Planned</div>
+                    </InfoTooltip>
+                    <div className="text-2xl font-bold text-blue-700">{runner.strengthPlanned}</div>
+                  </div>
+                  
+                  <div className="bg-green-50 rounded-xl p-4">
+                    <InfoTooltip tooltip="Number of strength training sessions completed">
+                      <div className="text-sm text-green-600 font-medium">Strength Completed</div>
+                    </InfoTooltip>
+                    <div className="text-2xl font-bold text-green-700">{runner.strengthCompleted}</div>
+                  </div>
+                  
+                  <div className="bg-purple-50 rounded-xl p-4">
+                    <InfoTooltip tooltip="Total mileage planned for the period">
+                      <div className="text-sm text-purple-600 font-medium">Mileage Planned</div>
+                    </InfoTooltip>
+                    <div className="text-2xl font-bold text-purple-700">{runner.mileagePlanned}</div>
+                  </div>
+                  
+                  <div className="bg-indigo-50 rounded-xl p-4">
+                    <InfoTooltip tooltip="Total mileage completed for the period">
+                      <div className="text-sm text-indigo-600 font-medium">Mileage Completed</div>
+                    </InfoTooltip>
+                    <div className="text-2xl font-bold text-indigo-700">{runner.mileageCompleted}</div>
+                  </div>
+                </div>
+
+                {/* Override Score */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Override Score (0-5)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="5"
+                    value={editingCards[runner.id] ? (cardData[runner.id]?.overrideScore || '') : (runner.overrideScore || '')}
+                    onChange={(e) => updateCardData(runner.id, 'overrideScore', e.target.value)}
+                    disabled={!editingCards[runner.id]}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500"
+                    placeholder="Optional override score"
+                  />
+                </div>
+
+                {/* Qualitative Score */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Coach Notes
+                  </label>
+                  <textarea
+                    value={editingCards[runner.id] ? (cardData[runner.id]?.qualitativeScore || '') : runner.qualitativeScore}
+                    onChange={(e) => updateCardData(runner.id, 'qualitativeScore', e.target.value)}
+                    disabled={!editingCards[runner.id]}
+                    rows={3}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:bg-gray-50 disabled:text-gray-500"
+                    placeholder="Enter your coaching notes..."
+                  />
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex justify-end space-x-3">
+                  {editingCards[runner.id] ? (
+                    <>
+                      <button
+                        onClick={() => handleCancel(runner.id)}
+                        className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => handleSave(runner.id)}
+                        className="px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all duration-200 flex items-center space-x-2 font-medium"
+                      >
+                        <Save className="h-4 w-4" />
+                        <span>Save Changes</span>
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => handleEdit(runner.id)}
+                      className="px-6 py-2 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-all duration-200 flex items-center space-x-2 font-medium"
+                    >
+                      <span>Edit</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default RunningCoachApp;
