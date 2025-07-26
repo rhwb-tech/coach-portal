@@ -4,7 +4,7 @@ import { fetchCoachData, updateAthleteData, calculateCompletionRate, getAvatarIn
 import { useAuth } from '../contexts/AuthContext';
 
 const CoachDashboard = () => {
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { user, isLoading } = useAuth();
   
   // Get coach email from JWT token or fallback to URL parameter
   const urlParams = new URLSearchParams(window.location.search);
