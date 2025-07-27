@@ -188,26 +188,57 @@ const RunnerDetails = ({ runner, seasonHistory, isLoading, onRunnerSelect }) => 
         return;
       }
       setIsLoadingHousehold(true);
-      const address = runner.address || '';
-      const zip = runner.zip || '';
-      const full_address = address + (address && zip ? ', ' : '') + zip;
+      console.log('Fetching household for runner:', runner.runner_name);
+      console.log('Using full_address:', runner.full_address);
+      
+      console.log('Fetching household for runner email:', runner.email_id);
+      
+      // First, get the full_address for the selected runner
+      const { data: runnerAddressData, error: addressError } = await supabase
+        .from('runners_household')
+        .select('full_address')
+        .eq('email_id', runner.email_id)
+        .single();
+      
+      console.log('Runner address query result:', { runnerAddressData, addressError });
+      
+      if (addressError || !runnerAddressData) {
+        console.log('Could not find runner address');
+        setHousehold([]);
+        setIsLoadingHousehold(false);
+        return;
+      }
+      
+      const runnerFullAddress = runnerAddressData.full_address;
+      console.log('Runner full_address:', runnerFullAddress);
+      
+      // Now get all household members with the same address, excluding the selected runner
       const { data, error } = await supabase
         .from('runners_household')
         .select('*')
-        .eq('full_address', full_address);
+        .eq('full_address', runnerFullAddress)
+        .neq('email_id', runner.email_id);
+      
+      console.log('Household query result:', { data, error });
+      
       if (error || !data) {
+        console.log('No household data found or error occurred');
         setHousehold([]);
         setIsLoadingHousehold(false);
         return;
       }
       // Fetch gender for each household member from runners_profile
       const emailIds = data.map((member) => member.email_id);
+      console.log('Household email IDs:', emailIds);
+      
       let genderMap = {};
       if (emailIds.length > 0) {
         const { data: profiles, error: profileError } = await supabase
           .from('runners_profile')
           .select('email_id, gender')
           .in('email_id', emailIds);
+        console.log('Gender query result:', { profiles, profileError });
+        
         if (!profileError && profiles) {
           genderMap = profiles.reduce((acc, profile) => {
             acc[profile.email_id] = profile.gender;
@@ -217,6 +248,7 @@ const RunnerDetails = ({ runner, seasonHistory, isLoading, onRunnerSelect }) => 
       }
       // Merge gender into household data
       const merged = data.map((member) => ({ ...member, gender: genderMap[member.email_id] || null }));
+      console.log('Final household data:', merged);
       setHousehold(merged);
       setIsLoadingHousehold(false);
     };
@@ -265,6 +297,18 @@ const RunnerDetails = ({ runner, seasonHistory, isLoading, onRunnerSelect }) => 
             <DetailItem icon={Users} label="Referred By" value={runner.referred_by} />
             <DetailItem icon={ChevronsRight} label="Most Recent Season" value={runner.most_recent_season} />
           </div>
+          
+          {/* Debug Information */}
+          <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <h3 className="text-sm font-semibold text-yellow-800 mb-2">Debug Information:</h3>
+            <div className="text-sm text-yellow-700 space-y-1">
+              <div><strong>Runner Email:</strong> {runner.email_id}</div>
+              <div><strong>Address:</strong> {runner.address || 'null'}</div>
+              <div><strong>Zip:</strong> {runner.zip || 'null'}</div>
+              <div><strong>Full Address (from DB):</strong> {runner.full_address || 'undefined'}</div>
+              <div><strong>Household Members Found:</strong> {household.length}</div>
+            </div>
+          </div>
         </div>
 
         {/* Runner's Family */}
@@ -295,7 +339,14 @@ const RunnerDetails = ({ runner, seasonHistory, isLoading, onRunnerSelect }) => 
                 })}
             </ul>
           ) : (
-            <p className="text-gray-700">No family members found for this address.</p>
+            <div>
+              <p className="text-gray-700">No family members found for this address.</p>
+              <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                <strong>Debug:</strong> Total household members: {household.length} | 
+                Filtered members (excluding self): {household.filter((member) => member.email_id !== runner.email_id).length} |
+                Current runner email: {runner.email_id}
+              </div>
+            </div>
           )}
         </div>
 
