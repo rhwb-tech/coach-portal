@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Info, Save, TrendingUp, Users, Calendar, ChevronDown, Menu, X } from 'lucide-react';
+import { Search, Info, Save, TrendingUp, ChevronDown, Menu, X } from 'lucide-react';
 import { fetchCoachData, updateAthleteData, calculateCompletionRate, getAvatarInitials } from '../services/coachService';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../services/supabaseClient';
 import RHWBConnect from './RHWBConnect';
+import KnowYourRunner from './KnowYourRunner';
 
 const CoachDashboard = () => {
   const { user, isLoading } = useAuth();
@@ -10,6 +12,7 @@ const CoachDashboard = () => {
   // Get coach email from JWT token or URL parameter
   const urlParams = new URLSearchParams(window.location.search);
   const coachEmail = user?.email || urlParams.get('coach');
+  // Season is now only used for Runner Metrics section
   const season = parseInt(urlParams.get('season')) || 13;
 
   const [selectedDistance, setSelectedDistance] = useState('All');
@@ -21,6 +24,16 @@ const CoachDashboard = () => {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [coachName, setCoachName] = useState(null);
+  
+  // Cohort data state for Know Your Runner
+  const [cohortData, setCohortData] = useState([]);
+  const [cohortLoading, setCohortLoading] = useState(false);
+  const [cohortError, setCohortError] = useState(null);
+  const [currentSeason, setCurrentSeason] = useState(null);
+  const [cohortFilterOptions, setCohortFilterOptions] = useState({
+    distances: []
+  });
   
   // Dropdown menu states
   const [distanceMenuOpen, setDistanceMenuOpen] = useState(false);
@@ -28,7 +41,7 @@ const CoachDashboard = () => {
   const [hamburgerMenuOpen, setHamburgerMenuOpen] = useState(false);
   
   // Navigation state
-  const [currentView, setCurrentView] = useState('rhwb-connect'); // 'dashboard' or 'rhwb-connect'
+  const [currentView, setCurrentView] = useState('know-your-runner'); // 'dashboard', 'rhwb-connect', or 'know-your-runner'
 
   // Get unique filter options from data
   // Store all data and filter options
@@ -38,9 +51,155 @@ const CoachDashboard = () => {
     mesocycles: []
   });
 
-  // Load all data and filter options on initial load only
+  // Load coach name on initial load (always needed for header display)
+  useEffect(() => {
+    const loadCoachName = async () => {
+      if (!coachEmail) return;
+      
+      try {
+        const { data: coachData, error: coachError } = await supabase
+          .from('rhwb_coaches')
+          .select('coach')
+          .eq('email_id', coachEmail)
+          .single();
+        
+        if (!coachError && coachData) {
+          setCoachName(coachData.coach);
+        }
+      } catch (error) {
+        console.error('Failed to fetch coach name:', error);
+      }
+    };
+
+    loadCoachName();
+  }, [coachEmail]);
+
+  // Load cohort data when switching to Know Your Runner view
+  useEffect(() => {
+    const loadCohortData = async () => {
+      if (currentView !== 'know-your-runner' || !coachEmail) return;
+      
+      try {
+        setCohortLoading(true);
+        setCohortError(null);
+        
+        // Query 1: Get current season from rhwb_seasons table
+        const { data: seasonData, error: seasonError } = await supabase
+          .from('rhwb_seasons')
+          .select('season')
+          .eq('current', true)
+          .single();
+        
+        if (seasonError || !seasonData) {
+          console.error('Failed to fetch current season:', seasonError);
+          setCohortData([]);
+          return;
+        }
+        
+        const currentSeasonValue = seasonData.season;
+        setCurrentSeason(currentSeasonValue);
+        
+        // Query 2: Get coach name from rhwb_coaches table
+        const { data: coachData, error: coachError } = await supabase
+          .from('rhwb_coaches')
+          .select('coach')
+          .eq('email_id', coachEmail)
+          .single();
+        
+        if (coachError || !coachData) {
+          setCohortData([]);
+          return;
+        }
+        
+        const coachNameValue = coachData.coach;
+        
+        // Query 3: Get the season info for the coach using current season
+        const { data: runnerSeasonData, error: runnerSeasonError } = await supabase
+          .from('runner_season_info')
+          .select('email_id, race_distance, coach, season')
+          .eq('season', currentSeasonValue)
+          .eq('coach', coachNameValue);
+        
+        if (runnerSeasonError || !runnerSeasonData || runnerSeasonData.length === 0) {
+          setCohortData([]);
+          return;
+        }
+        
+        // Get email IDs from season data
+        const emailIds = runnerSeasonData.map(item => item.email_id);
+        
+        // Query 4: Fetch runner profiles for these email IDs
+        const { data: profileData, error: profileError } = await supabase
+          .from('runners_profile')
+          .select('email_id, runner_name, gender, phone_no, dob, city, state')
+          .in('email_id', emailIds);
+        
+        // Combine the data
+        const cohortResult = runnerSeasonData.map(seasonItem => {
+          const profileItem = profileData?.find(profile => profile.email_id === seasonItem.email_id);
+          return {
+            ...seasonItem,
+            runners_profile: profileItem
+          };
+        });
+        
+        if (!profileError) {
+                     // Transform the data to match the expected format
+           const transformedCohort = cohortResult?.map(runner => {
+             const age = runner.runners_profile?.dob ? new Date().getFullYear() - new Date(runner.runners_profile.dob).getFullYear() : null;
+             const gender = runner.runners_profile?.gender;
+             const genderAge = gender && age ? `${gender.substring(0, 1)}${age}` : age ? `${age}` : 'N/A';
+             
+             return {
+               runner_name: runner.runners_profile?.runner_name,
+               gender: runner.runners_profile?.gender,
+               phone_no: runner.runners_profile?.phone_no,
+               age: age,
+               gender_age: genderAge,
+               race_distance: runner.race_distance,
+               location: [runner.runners_profile?.city, runner.runners_profile?.state].filter(Boolean).join(', '),
+               email_id: runner.email_id
+             };
+           }) || [];
+          
+          setCohortData(transformedCohort);
+          
+          // Get unique race distances from cohort data
+          const uniqueDistances = [...new Set(transformedCohort.map(r => r.race_distance).filter(Boolean))].sort();
+          
+          setCohortFilterOptions({
+            distances: [
+              { value: 'All', label: 'All Distances' },
+              ...uniqueDistances.map(distance => ({ value: distance, label: distance }))
+            ]
+          });
+
+          // Set the first race distance as default
+          if (uniqueDistances.length > 0) {
+            setSelectedDistance(uniqueDistances[0]);
+          }
+        }
+        
+      } catch (error) {
+        console.error('Error loading cohort data:', error);
+        setCohortError('Failed to load cohort data');
+      } finally {
+        setCohortLoading(false);
+      }
+    };
+
+    loadCohortData();
+  }, [currentView, coachEmail]);
+
+  // Load all data and filter options on initial load only (only for Runner Metrics)
   useEffect(() => {
     const loadAllData = async () => {
+      // Only load data if we're on the dashboard view (Runner Metrics)
+      if (currentView !== 'dashboard') {
+        setLoading(false);
+        return;
+      }
+      
       try {
         setLoading(true);
         const data = await fetchCoachData(coachEmail, season, 'All', '');
@@ -77,7 +236,7 @@ const CoachDashboard = () => {
     };
 
     loadAllData();
-  }, [coachEmail, season]);
+  }, [coachEmail, season, currentView]);
 
   // Handle redirect to Wix website when no authentication
   useEffect(() => {
@@ -377,16 +536,16 @@ const CoachDashboard = () => {
     );
   }
 
-  // Show loading state while data is loading
-  if (loading) {
+  // Show loading state while data is loading (only for dashboard view)
+  if (currentView === 'dashboard' && loading) {
     return <div className="text-center py-8">Loading athlete data...</div>;
   }
 
-  if (error) {
+  if (currentView === 'dashboard' && error) {
     return <div className="text-center py-8 text-red-600">{error}</div>;
   }
 
-  if (filteredRunners.length === 0) {
+  if (currentView === 'dashboard' && filteredRunners.length === 0) {
     return <div className="text-center py-8">No athletes found matching your criteria.</div>;
   }
 
@@ -417,34 +576,44 @@ const CoachDashboard = () => {
                 <p className="text-sm text-gray-600">Smarter Coaching. Stronger Community</p>
               </div>
               
-              {/* Desktop Navigation Tabs */}
-              <div className="hidden lg:flex items-center space-x-1 ml-8">
-                <button
-                  onClick={() => setCurrentView('rhwb-connect')}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
-                    currentView === 'rhwb-connect'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  OneRHWB
-                </button>
-                <button
-                  onClick={() => setCurrentView('dashboard')}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
-                    currentView === 'dashboard'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  Runner Metrics
-                </button>
-              </div>
+                      {/* Desktop Navigation Tabs */}
+        <div className="hidden lg:flex items-center space-x-1 ml-8">
+          <button
+            onClick={() => setCurrentView('know-your-runner')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
+              currentView === 'know-your-runner'
+                ? 'bg-blue-100 text-blue-700'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+          >
+            Know Your Runner
+          </button>
+          <button
+            onClick={() => setCurrentView('rhwb-connect')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
+              currentView === 'rhwb-connect'
+                ? 'bg-blue-100 text-blue-700'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+          >
+            OneRHWB
+          </button>
+          <button
+            onClick={() => setCurrentView('dashboard')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
+              currentView === 'dashboard'
+                ? 'bg-blue-100 text-blue-700'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+          >
+            Runner Metrics
+          </button>
+        </div>
             </div>
             
             <div className="flex items-center space-x-4">
               <div className="hidden md:flex items-center space-x-2 text-sm text-gray-600">
-                <span>Coach: {user?.name || user?.email || allAthletes[0]?.coach || 'Unknown'}</span>
+                <span>Coach: {user?.name || coachName || 'Unknown'}</span>
               </div>
             </div>
           </div>
@@ -456,6 +625,19 @@ const CoachDashboard = () => {
         <div className="lg:hidden absolute top-16 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-gray-200 shadow-lg z-[60] hamburger-menu">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="space-y-2">
+              <button
+                onClick={() => {
+                  setCurrentView('know-your-runner');
+                  setHamburgerMenuOpen(false);
+                }}
+                className={`w-full text-left px-4 py-3 rounded-lg transition-colors duration-200 font-medium ${
+                  currentView === 'know-your-runner' 
+                    ? 'bg-blue-50 text-blue-700' 
+                    : 'text-gray-700 hover:bg-gray-50 hover:text-blue-600'
+                }`}
+              >
+                Know Your Runner
+              </button>
               <button
                 onClick={() => {
                   setCurrentView('rhwb-connect');
@@ -720,8 +902,20 @@ const CoachDashboard = () => {
           ))}
         </div>
       </div>
-      ) : (
+      ) : currentView === 'rhwb-connect' ? (
         <RHWBConnect />
+      ) : (
+        <KnowYourRunner 
+          cohortData={cohortData}
+          cohortLoading={cohortLoading}
+          cohortError={cohortError}
+          selectedDistance={selectedDistance}
+          setSelectedDistance={setSelectedDistance}
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          filterOptions={cohortFilterOptions}
+          currentSeason={currentSeason}
+        />
       )}
     </div>
   );
