@@ -131,7 +131,7 @@ const CoachDashboard = () => {
         // Query 4: Fetch runner profiles for these email IDs
         const { data: profileData, error: profileError } = await supabase
           .from('runners_profile')
-          .select('email_id, runner_name, gender, phone_no, dob, city, state')
+          .select('email_id, runner_name, gender, phone_no, dob, city, state, notes_present')
           .in('email_id', emailIds);
         
         // Combine the data
@@ -156,10 +156,11 @@ const CoachDashboard = () => {
                phone_no: runner.runners_profile?.phone_no,
                age: age,
                gender_age: genderAge,
-               race_distance: runner.race_distance,
-               location: [runner.runners_profile?.city, runner.runners_profile?.state].filter(Boolean).join(', '),
-               email_id: runner.email_id
-             };
+                               race_distance: runner.race_distance,
+                location: [runner.runners_profile?.city, runner.runners_profile?.state].filter(Boolean).join(', '),
+                email_id: runner.email_id,
+                notes_present: runner.runners_profile?.notes_present || false
+              };
            }) || [];
           
           setCohortData(transformedCohort);
@@ -191,6 +192,119 @@ const CoachDashboard = () => {
     loadCohortData();
   }, [currentView, coachEmail]);
 
+  // Listen for notes updates to refresh cohort data
+  useEffect(() => {
+    const handleNotesUpdated = (event) => {
+      const { emailId, hasNotes } = event.detail;
+      console.log('Notes updated for:', emailId, 'Has notes:', hasNotes);
+      
+      // Refresh cohort data to update star colors
+      if (currentView === 'know-your-runner') {
+        // Trigger a reload of cohort data
+        const loadCohortData = async () => {
+          if (!coachEmail) return;
+          
+          try {
+            setCohortLoading(true);
+            setCohortError(null);
+            
+            // Query 1: Get current season from rhwb_seasons table
+            const { data: seasonData, error: seasonError } = await supabase
+              .from('rhwb_seasons')
+              .select('season')
+              .eq('current', true)
+              .single();
+            
+            if (seasonError || !seasonData) {
+              console.error('Failed to fetch current season:', seasonError);
+              setCohortData([]);
+              return;
+            }
+            
+            const currentSeasonValue = seasonData.season;
+            setCurrentSeason(currentSeasonValue);
+            
+            // Query 2: Get coach name from rhwb_coaches table
+            const { data: coachData, error: coachError } = await supabase
+              .from('rhwb_coaches')
+              .select('coach')
+              .eq('email_id', coachEmail)
+              .single();
+            
+            if (coachError || !coachData) {
+              setCohortData([]);
+              return;
+            }
+            
+            const coachNameValue = coachData.coach;
+            
+            // Query 3: Get the season info for the coach using current season
+            const { data: runnerSeasonData, error: runnerSeasonError } = await supabase
+              .from('runner_season_info')
+              .select('email_id, race_distance, coach, season')
+              .eq('season', currentSeasonValue)
+              .eq('coach', coachNameValue);
+            
+            if (runnerSeasonError || !runnerSeasonData || runnerSeasonData.length === 0) {
+              setCohortData([]);
+              return;
+            }
+            
+            // Get email IDs from season data
+            const emailIds = runnerSeasonData.map(item => item.email_id);
+            
+            // Query 4: Fetch runner profiles for these email IDs
+            const { data: profileData, error: profileError } = await supabase
+              .from('runners_profile')
+              .select('email_id, runner_name, gender, phone_no, dob, city, state, notes_present')
+              .in('email_id', emailIds);
+            
+            // Combine the data
+            const cohortResult = runnerSeasonData.map(seasonItem => {
+              const profileItem = profileData?.find(profile => profile.email_id === seasonItem.email_id);
+              return {
+                ...seasonItem,
+                runners_profile: profileItem
+              };
+            });
+            
+            if (!profileError) {
+              // Transform the data to match the expected format
+              const transformedCohort = cohortResult?.map(runner => {
+                const age = runner.runners_profile?.dob ? new Date().getFullYear() - new Date(runner.runners_profile.dob).getFullYear() : null;
+                const gender = runner.runners_profile?.gender;
+                const genderAge = gender && age ? `${gender.substring(0, 1)}${age}` : age ? `${age}` : 'N/A';
+                
+                return {
+                  runner_name: runner.runners_profile?.runner_name,
+                  gender: runner.runners_profile?.gender,
+                  phone_no: runner.runners_profile?.phone_no,
+                  age: age,
+                  gender_age: genderAge,
+                  race_distance: runner.race_distance,
+                  location: [runner.runners_profile?.city, runner.runners_profile?.state].filter(Boolean).join(', '),
+                  email_id: runner.email_id,
+                  notes_present: runner.runners_profile?.notes_present || false
+                };
+              }) || [];
+              
+              setCohortData(transformedCohort);
+            }
+            
+          } catch (error) {
+            console.error('Error refreshing cohort data:', error);
+          } finally {
+            setCohortLoading(false);
+          }
+        };
+        
+        loadCohortData();
+      }
+    };
+
+    window.addEventListener('notesUpdated', handleNotesUpdated);
+    return () => window.removeEventListener('notesUpdated', handleNotesUpdated);
+  }, [currentView, coachEmail]);
   // Load all data and filter options on initial load only (only for Runner Metrics)
   useEffect(() => {
     const loadAllData = async () => {
@@ -408,9 +522,10 @@ const CoachDashboard = () => {
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
+    // Use click instead of mousedown to avoid race condition with button clicks
+    document.addEventListener('click', handleClickOutside);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('click', handleClickOutside);
     };
   }, []);
 
@@ -680,7 +795,7 @@ const CoachDashboard = () => {
                 {/* Race Distance Chip */}
                 <div className="relative filter-dropdown z-40">
                   <button
-                    onClick={() => setDistanceMenuOpen(!distanceMenuOpen)}
+                    onClick={() => setDistanceMenuOpen((prev) => !prev)}
                     className="flex items-center space-x-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-full font-medium hover:bg-blue-100 transition-colors duration-200 border border-blue-200"
                   >
                     <span>{selectedDistance}</span>
@@ -710,7 +825,7 @@ const CoachDashboard = () => {
                 {/* Mesocycle Chip */}
                 <div className="relative filter-dropdown z-40">
                   <button
-                    onClick={() => setMesoMenuOpen(!mesoMenuOpen)}
+                    onClick={() => setMesoMenuOpen((prev) => !prev)}
                     className="flex items-center space-x-2 px-4 py-2 bg-purple-50 text-purple-700 rounded-full font-medium hover:bg-purple-100 transition-colors duration-200 border border-purple-200"
                   >
                     <span>{selectedMeso || 'Select Mesocycle'}</span>
@@ -915,6 +1030,7 @@ const CoachDashboard = () => {
           setSearchTerm={setSearchTerm}
           filterOptions={cohortFilterOptions}
           currentSeason={currentSeason}
+          coachEmail={coachEmail}
         />
       )}
     </div>

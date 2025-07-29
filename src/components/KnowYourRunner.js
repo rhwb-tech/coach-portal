@@ -1,8 +1,17 @@
 import React, { useState, useEffect } from 'react';
+<<<<<<< HEAD
 import { ChevronDown, Search, Users, Edit, User, Users as FamilyIcon, Clock, FileText, TrendingUp } from 'lucide-react';
 import RunnerCoachNotes from './RunnerCoachNotes';
 import RunnerBio from './RunnerBio';
 import RunnerFamilyMembers from './RunnerFamilyMembers';
+=======
+import { ChevronDown, Search, Users, Edit, User, Users as FamilyIcon, Clock, FileText, TrendingUp, Plus } from 'lucide-react';
+import { supabase } from '../services/supabaseClient';
+import RunnerCoachNotes from './RunnerCoachNotes';
+import RunnerBio from './RunnerBio';
+import RunnerFamilyMembers from './RunnerFamilyMembers';
+import RunnerClubHistory from './RunnerClubHistory';
+>>>>>>> ff4f910 (July 28th changes)
 
 const KnowYourRunner = ({ 
   cohortData = [], 
@@ -13,12 +22,30 @@ const KnowYourRunner = ({
   searchTerm = '',
   setSearchTerm,
   filterOptions = { distances: [] },
+<<<<<<< HEAD
   currentSeason = null
+=======
+  currentSeason = null,
+  coachEmail = null
+>>>>>>> ff4f910 (July 28th changes)
 }) => {
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [distanceMenuOpen, setDistanceMenuOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState({});
   const [selectedRunner, setSelectedRunner] = useState(null);
+<<<<<<< HEAD
+=======
+  const [menuOpenFor, setMenuOpenFor] = useState(null); // Track which runner's menu is open
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const [transferRunner, setTransferRunner] = useState(null);
+  const [selectedProgram, setSelectedProgram] = useState(null);
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [notesRunner, setNotesRunner] = useState(null);
+  const [notesContent, setNotesContent] = useState('');
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [notesSaved, setNotesSaved] = useState(false);
+>>>>>>> ff4f910 (July 28th changes)
 
   // Handle click outside for dropdowns
   useEffect(() => {
@@ -27,12 +54,34 @@ const KnowYourRunner = ({
         setDistanceMenuOpen(false);
         setShowAutocomplete(false);
       }
+<<<<<<< HEAD
+=======
+      if (!event.target.closest('.runner-menu')) {
+        setMenuOpenFor(null);
+      }
+>>>>>>> ff4f910 (July 28th changes)
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+<<<<<<< HEAD
+=======
+  // Listen for notes updates to refresh the star colors
+  useEffect(() => {
+    const handleNotesUpdated = (event) => {
+      const { emailId, hasNotes } = event.detail;
+      // Trigger a page refresh or data reload to update the star colors
+      // For now, we'll just log the event - the parent component will handle the data refresh
+      console.log('Notes updated for:', emailId, 'Has notes:', hasNotes);
+    };
+
+    window.addEventListener('notesUpdated', handleNotesUpdated);
+    return () => window.removeEventListener('notesUpdated', handleNotesUpdated);
+  }, []);
+
+>>>>>>> ff4f910 (July 28th changes)
   // Filter cohort data based on selected distance and search term
   const filteredRunners = cohortData.filter(runner => {
     const matchesDistance = selectedDistance === 'All' || runner.race_distance === selectedDistance;
@@ -70,9 +119,191 @@ const KnowYourRunner = ({
 
   // Handle runner selection
   const handleRunnerSelect = (runner) => {
+<<<<<<< HEAD
     setSelectedRunner(runner);
     // Reset expanded sections when selecting a new runner
     setExpandedSections({});
+=======
+    // Toggle selection - if clicking the same runner, deselect it
+    if (selectedRunner?.email_id === runner.email_id) {
+      setSelectedRunner(null);
+      setExpandedSections({});
+    } else {
+      setSelectedRunner(runner);
+      // Reset expanded sections when selecting a new runner
+      setExpandedSections({});
+    }
+  };
+
+  // Handle menu toggle
+  const toggleMenu = (runnerId, event) => {
+    event.stopPropagation(); // Prevent triggering runner selection
+    setMenuOpenFor(menuOpenFor === runnerId ? null : runnerId);
+  };
+
+  // Handle transfer runner
+  const handleTransferRunner = (runner) => {
+    setTransferRunner(runner);
+    setShowTransferModal(true);
+    setMenuOpenFor(null); // Close the menu
+  };
+
+  // Handle star click (opens notes modal)
+  const handleStarClick = async (runner, event) => {
+    event.stopPropagation(); // Prevent triggering runner selection
+    
+    // Select the runner if not already selected
+    if (selectedRunner?.email_id !== runner.email_id) {
+      setSelectedRunner(runner);
+      setExpandedSections({});
+    }
+    
+    // Expand the coach notes section
+    setExpandedSections(prev => ({
+      ...prev,
+      coachNotes: true
+    }));
+  };
+
+  // Auto-save notes
+  const saveNotes = async (content) => {
+    if (!notesRunner || !coachEmail) return;
+    try {
+      setNotesLoading(true);
+      // Check if notes already exist for this runner/coach combination
+      const { data: existingNotes } = await supabase
+        .from('profile_notes')
+        .select('note_ts')
+        .eq('email_id', notesRunner.email_id)
+        .eq('comment_by', coachEmail)
+        .order('note_ts', { ascending: false })
+        .limit(1)
+        .single();
+      if (existingNotes) {
+        // Update existing note (by timestamp)
+        const { error } = await supabase
+          .from('profile_notes')
+          .update({
+            note: content,
+            note_ts: new Date().toISOString()
+          })
+          .eq('email_id', notesRunner.email_id)
+          .eq('comment_by', coachEmail)
+          .eq('note_ts', existingNotes.note_ts);
+        if (error) throw error;
+      } else {
+        // Insert new note
+        const { error } = await supabase
+          .from('profile_notes')
+          .insert([{
+            email_id: notesRunner.email_id,
+            note: content,
+            note_ts: new Date().toISOString(),
+            comment_by: coachEmail
+          }]);
+        if (error) throw error;
+      }
+      setNotesSaved(true);
+      setTimeout(() => setNotesSaved(false), 2000);
+      console.log('Notes saved successfully');
+      // Update notes_present in runners_profile
+      if (notesRunner && notesRunner.email_id) {
+        const { error: updateError } = await supabase
+          .from('runners_profile')
+          .update({ notes_present: true })
+          .eq('email_id', notesRunner.email_id);
+        if (updateError) {
+          console.error('Failed to update notes_present in runners_profile:', updateError);
+        } else {
+          console.log('notes_present updated in runners_profile');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to save notes:', error);
+    } finally {
+      setNotesLoading(false);
+    }
+  };
+
+  // Handle notes content change with auto-save
+  const handleNotesChange = (content) => {
+    setNotesContent(content);
+    // Auto-save after a short delay
+    setTimeout(() => {
+      saveNotes(content);
+    }, 1000); // 1 second delay
+  };
+
+  // Handle program selection (shows confirmation modal)
+  const handleProgramSelection = (newProgram) => {
+    setSelectedProgram(newProgram);
+    setShowTransferModal(false);
+    setShowConfirmationModal(true);
+  };
+
+  // Handle confirmed program transfer
+  const handleConfirmedTransfer = async () => {
+    try {
+      console.log('Starting transfer request...');
+      console.log('Coach email:', coachEmail);
+      console.log('Transfer runner:', transferRunner);
+      console.log('Selected program:', selectedProgram);
+      
+      // Check authentication
+      const { data: { session }, error: authError } = await supabase.auth.getSession();
+      console.log('Auth session:', session);
+      console.log('Auth error:', authError);
+      
+      const transferData = {
+        action_type: 'Transfer Runner',
+        runner_email_id: transferRunner.email_id,
+        requestor_email_id: coachEmail || 'unknown@example.com'
+      };
+      
+      console.log('Transfer data:', transferData);
+      console.log('Note: current_program and new_program will be stored in action_type or separate table');
+
+      // First, let's test if we can read from the table
+      console.log('Testing table connection...');
+      const { data: testData, error: testError } = await supabase
+        .from('rhwb_action_requests')
+        .select('*')
+        .limit(1);
+      
+      if (testError) {
+        console.error('Failed to read from table:', testError);
+        alert('Cannot connect to table. Check Supabase configuration.');
+        return;
+      }
+      
+      console.log('Table connection successful. Current data:', testData);
+
+      // Insert into rhwb_action_requests table
+      const { data, error } = await supabase
+        .from('rhwb_action_requests')
+        .insert([transferData]);
+
+      if (error) {
+        console.error('Failed to insert transfer request:', error);
+        console.error('Error details:', error.message, error.details, error.hint);
+        throw error;
+      }
+
+      console.log('Transfer request submitted successfully:', data);
+      
+      // Close modals and reset state
+      setShowConfirmationModal(false);
+      setTransferRunner(null);
+      setSelectedProgram(null);
+      
+      // Show success message
+      alert('Transfer request submitted successfully!');
+      
+    } catch (error) {
+      console.error('Failed to submit transfer request:', error);
+      alert('Failed to submit transfer request. Check console for details.');
+    }
+>>>>>>> ff4f910 (July 28th changes)
   };
 
   const distanceOptions = filterOptions.distances;
@@ -240,19 +471,55 @@ const KnowYourRunner = ({
                     
                     {/* Right side - Action icons */}
                     <div className="flex items-center space-x-2">
+<<<<<<< HEAD
                       {/* Star icon (placeholder for favorite/status) */}
                       <button className="p-2 text-gray-400 hover:text-yellow-500 transition-colors">
+=======
+                      {/* Star icon (opens notes) */}
+                      <button 
+                        className={`p-2 transition-colors ${runner.notes_present ? 'text-green-500 hover:text-green-600' : 'text-gray-400 hover:text-yellow-500'}`}
+                        onClick={(e) => handleStarClick(runner, e)}
+                      >
+>>>>>>> ff4f910 (July 28th changes)
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                           <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                         </svg>
                       </button>
                       
                       {/* More options */}
+<<<<<<< HEAD
                       <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                           <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
                         </svg>
                       </button>
+=======
+                      <div className="relative runner-menu">
+                        <button 
+                          className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                          onClick={(e) => toggleMenu(runner.email_id, e)}
+                        >
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                          </svg>
+                        </button>
+                        
+                        {/* Dropdown Menu */}
+                        {menuOpenFor === runner.email_id && (
+                          <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 min-w-[160px]">
+                            <button
+                              onClick={() => handleTransferRunner(runner)}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center space-x-2"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                              </svg>
+                              <span>Transfer Runner</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+>>>>>>> ff4f910 (July 28th changes)
                       
                       {/* Chevron down */}
                       <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${
@@ -267,6 +534,7 @@ const KnowYourRunner = ({
                   <div className="space-y-3 ml-4">
                     {/* Coach Notes */}
                     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+<<<<<<< HEAD
                       <button
                         onClick={() => toggleSection('coachNotes')}
                         className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
@@ -279,6 +547,36 @@ const KnowYourRunner = ({
                           expandedSections.coachNotes ? 'rotate-180' : ''
                         }`} />
                       </button>
+=======
+                      <div className="flex items-center justify-between p-4">
+                        <button
+                          onClick={() => toggleSection('coachNotes')}
+                          className="flex items-center space-x-3 hover:bg-gray-50 transition-colors rounded-lg p-2"
+                        >
+                          <Edit className="h-5 w-5 text-blue-600" />
+                          <span className="font-medium text-gray-900">Coach Notes</span>
+                          <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform duration-200 ${
+                            expandedSections.coachNotes ? 'rotate-180' : ''
+                          }`} />
+                        </button>
+                        {expandedSections.coachNotes && (
+                          <button
+                            onClick={() => {
+                              // This will be handled by the RunnerCoachNotes component
+                              if (typeof window !== 'undefined') {
+                                window.dispatchEvent(new CustomEvent('addNote', { 
+                                  detail: { runnerEmail: runner.email_id } 
+                                }));
+                              }
+                            }}
+                            className="flex items-center space-x-1 px-3 py-1 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-sm"
+                          >
+                            <Plus className="h-4 w-4" />
+                            <span>Add Note</span>
+                          </button>
+                        )}
+                      </div>
+>>>>>>> ff4f910 (July 28th changes)
                       {expandedSections.coachNotes && (
                         <div className="px-4 pb-4">
                           <RunnerCoachNotes runner={runner} />
@@ -286,6 +584,7 @@ const KnowYourRunner = ({
                       )}
                     </div>
 
+<<<<<<< HEAD
                     {/* Bio & Background */}
                     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                       <button
@@ -306,6 +605,9 @@ const KnowYourRunner = ({
                         </div>
                       )}
                     </div>
+=======
+
+>>>>>>> ff4f910 (July 28th changes)
 
                     {/* Family Members */}
                     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -344,7 +646,11 @@ const KnowYourRunner = ({
                       </button>
                       {expandedSections.clubHistory && (
                         <div className="px-4 pb-4">
+<<<<<<< HEAD
                           <div className="text-gray-600">Club history information will be displayed here.</div>
+=======
+                          <RunnerClubHistory runner={runner} />
+>>>>>>> ff4f910 (July 28th changes)
                         </div>
                       )}
                     </div>
@@ -404,6 +710,188 @@ const KnowYourRunner = ({
           </div>
         )}
       </div>
+<<<<<<< HEAD
+=======
+
+      {/* Transfer Program Modal */}
+      {showTransferModal && transferRunner && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            {/* Header */}
+            <div className="flex items-center space-x-3 p-6 border-b border-gray-200">
+              <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+              <h2 className="text-xl font-bold text-gray-900">Transfer Program</h2>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              <p className="text-gray-700 mb-2">
+                Transfer <span className="font-semibold">{transferRunner.runner_name}</span>
+              </p>
+              <p className="text-gray-600 mb-4">
+                Current program: <span className="text-blue-600 font-medium">{transferRunner.race_distance}</span>
+              </p>
+              <p className="text-gray-700 mb-4">Select a new program:</p>
+
+              {/* Program Options */}
+              <div className="space-y-2">
+                {['Lite', '5K', '10K', 'Half Marathon', 'Full Marathon'].map((program) => (
+                  <button
+                    key={program}
+                    onClick={() => handleProgramSelection(program)}
+                    className="w-full flex items-center justify-between p-3 text-left border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    <span className="font-medium text-gray-900">{program}</span>
+                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-center p-6 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowTransferModal(false);
+                  setTransferRunner(null);
+                }}
+                className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Transfer Modal */}
+      {showConfirmationModal && transferRunner && selectedProgram && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            {/* Header */}
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-xl font-bold text-gray-900">Confirm Transfer</h2>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              <p className="text-gray-700 mb-4">
+                Are you sure you want to transfer <span className="font-semibold">{transferRunner.runner_name}</span>?
+              </p>
+              
+              {/* Transfer Details */}
+              <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">From:</span>
+                  <span className="font-medium text-gray-900">{transferRunner.race_distance}</span>
+                </div>
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-gray-600">To:</span>
+                  <span className="font-medium text-blue-600">{selectedProgram}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end space-x-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowConfirmationModal(false);
+                  setTransferRunner(null);
+                  setSelectedProgram(null);
+                }}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmedTransfer}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              >
+                Confirm Transfer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notes Modal */}
+      {showNotesModal && notesRunner && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div className="flex items-center space-x-3">
+                <div className="bg-blue-100 rounded-full w-10 h-10 flex items-center justify-center">
+                  <span className="text-blue-600 font-semibold text-sm">
+                    {notesRunner.runner_name ? notesRunner.runner_name.split(' ').map(n => n[0]).join('').toUpperCase() : 'U'}
+                  </span>
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Notes for {notesRunner.runner_name}</h2>
+                  <p className="text-sm text-gray-500">{notesRunner.race_distance} • {notesRunner.location}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowNotesModal(false);
+                  setNotesRunner(null);
+                  setNotesContent('');
+                }}
+                className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 p-6 overflow-hidden">
+              <div className="h-full flex flex-col">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Coach Notes
+                </label>
+                <textarea
+                  value={notesContent}
+                  onChange={(e) => handleNotesChange(e.target.value)}
+                  placeholder="Enter your notes about this runner..."
+                  className="flex-1 w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  rows={10}
+                />
+                {notesLoading && (
+                  <div className="mt-2 flex items-center text-sm text-gray-500">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                    Saving...
+                  </div>
+                )}
+                {notesSaved && !notesLoading && (
+                  <div className="mt-2 text-green-600 text-sm font-medium">Saved</div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end space-x-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowNotesModal(false);
+                  setNotesRunner(null);
+                  setNotesContent('');
+                }}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+>>>>>>> ff4f910 (July 28th changes)
     </div>
   );
 };
