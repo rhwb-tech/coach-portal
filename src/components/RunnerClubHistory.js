@@ -19,7 +19,7 @@ const RunnerClubHistory = ({ runner }) => {
 
       try {
         const { data, error } = await supabase
-          .from('runners_season_info')
+          .from('runner_season_info')
           .select('season, race_distance, coach')
           .eq('email_id', runner.email_id)
           .order('season', { ascending: false });
@@ -73,7 +73,7 @@ const RunnerClubHistory = ({ runner }) => {
       <ul className="space-y-2">
         {seasonHistory.map((season, index) => (
           <li key={`${season.season}-${index}`} className="flex justify-between items-center py-2">
-            <span className="text-blue-600 font-medium">Season {season.season}</span>
+            <span className="text-blue-600 font-medium">{season.season}</span>
             <span className="text-gray-500">{season.race_distance} • {season.coach}</span>
           </li>
         ))}

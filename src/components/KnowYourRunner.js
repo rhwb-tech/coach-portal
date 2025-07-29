@@ -1,17 +1,10 @@
 import React, { useState, useEffect } from 'react';
-<<<<<<< HEAD
-import { ChevronDown, Search, Users, Edit, User, Users as FamilyIcon, Clock, FileText, TrendingUp } from 'lucide-react';
-import RunnerCoachNotes from './RunnerCoachNotes';
-import RunnerBio from './RunnerBio';
-import RunnerFamilyMembers from './RunnerFamilyMembers';
-=======
 import { ChevronDown, Search, Users, Edit, User, Users as FamilyIcon, Clock, FileText, TrendingUp, Plus } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 import RunnerCoachNotes from './RunnerCoachNotes';
 import RunnerBio from './RunnerBio';
 import RunnerFamilyMembers from './RunnerFamilyMembers';
 import RunnerClubHistory from './RunnerClubHistory';
->>>>>>> ff4f910 (July 28th changes)
 
 const KnowYourRunner = ({ 
   cohortData = [], 
@@ -22,19 +15,13 @@ const KnowYourRunner = ({
   searchTerm = '',
   setSearchTerm,
   filterOptions = { distances: [] },
-<<<<<<< HEAD
-  currentSeason = null
-=======
   currentSeason = null,
   coachEmail = null
->>>>>>> ff4f910 (July 28th changes)
 }) => {
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [distanceMenuOpen, setDistanceMenuOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState({});
   const [selectedRunner, setSelectedRunner] = useState(null);
-<<<<<<< HEAD
-=======
   const [menuOpenFor, setMenuOpenFor] = useState(null); // Track which runner's menu is open
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
@@ -45,7 +32,6 @@ const KnowYourRunner = ({
   const [notesContent, setNotesContent] = useState('');
   const [notesLoading, setNotesLoading] = useState(false);
   const [notesSaved, setNotesSaved] = useState(false);
->>>>>>> ff4f910 (July 28th changes)
 
   // Handle click outside for dropdowns
   useEffect(() => {
@@ -54,20 +40,15 @@ const KnowYourRunner = ({
         setDistanceMenuOpen(false);
         setShowAutocomplete(false);
       }
-<<<<<<< HEAD
-=======
       if (!event.target.closest('.runner-menu')) {
         setMenuOpenFor(null);
       }
->>>>>>> ff4f910 (July 28th changes)
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-<<<<<<< HEAD
-=======
   // Listen for notes updates to refresh the star colors
   useEffect(() => {
     const handleNotesUpdated = (event) => {
@@ -80,8 +61,6 @@ const KnowYourRunner = ({
     window.addEventListener('notesUpdated', handleNotesUpdated);
     return () => window.removeEventListener('notesUpdated', handleNotesUpdated);
   }, []);
-
->>>>>>> ff4f910 (July 28th changes)
   // Filter cohort data based on selected distance and search term
   const filteredRunners = cohortData.filter(runner => {
     const matchesDistance = selectedDistance === 'All' || runner.race_distance === selectedDistance;
@@ -119,11 +98,6 @@ const KnowYourRunner = ({
 
   // Handle runner selection
   const handleRunnerSelect = (runner) => {
-<<<<<<< HEAD
-    setSelectedRunner(runner);
-    // Reset expanded sections when selecting a new runner
-    setExpandedSections({});
-=======
     // Toggle selection - if clicking the same runner, deselect it
     if (selectedRunner?.email_id === runner.email_id) {
       setSelectedRunner(null);
@@ -303,7 +277,6 @@ const KnowYourRunner = ({
       console.error('Failed to submit transfer request:', error);
       alert('Failed to submit transfer request. Check console for details.');
     }
->>>>>>> ff4f910 (July 28th changes)
   };
 
   const distanceOptions = filterOptions.distances;
@@ -471,29 +444,17 @@ const KnowYourRunner = ({
                     
                     {/* Right side - Action icons */}
                     <div className="flex items-center space-x-2">
-<<<<<<< HEAD
-                      {/* Star icon (placeholder for favorite/status) */}
-                      <button className="p-2 text-gray-400 hover:text-yellow-500 transition-colors">
-=======
                       {/* Star icon (opens notes) */}
                       <button 
                         className={`p-2 transition-colors ${runner.notes_present ? 'text-green-500 hover:text-green-600' : 'text-gray-400 hover:text-yellow-500'}`}
                         onClick={(e) => handleStarClick(runner, e)}
                       >
->>>>>>> ff4f910 (July 28th changes)
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                           <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                         </svg>
                       </button>
                       
                       {/* More options */}
-<<<<<<< HEAD
-                      <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                        </svg>
-                      </button>
-=======
                       <div className="relative runner-menu">
                         <button 
                           className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
@@ -519,7 +480,6 @@ const KnowYourRunner = ({
                           </div>
                         )}
                       </div>
->>>>>>> ff4f910 (July 28th changes)
                       
                       {/* Chevron down */}
                       <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${
@@ -534,20 +494,6 @@ const KnowYourRunner = ({
                   <div className="space-y-3 ml-4">
                     {/* Coach Notes */}
                     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-<<<<<<< HEAD
-                      <button
-                        onClick={() => toggleSection('coachNotes')}
-                        className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-center space-x-3">
-                          <Edit className="h-5 w-5 text-blue-600" />
-                          <span className="font-medium text-gray-900">Coach Notes</span>
-                        </div>
-                        <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform duration-200 ${
-                          expandedSections.coachNotes ? 'rotate-180' : ''
-                        }`} />
-                      </button>
-=======
                       <div className="flex items-center justify-between p-4">
                         <button
                           onClick={() => toggleSection('coachNotes')}
@@ -576,7 +522,6 @@ const KnowYourRunner = ({
                           </button>
                         )}
                       </div>
->>>>>>> ff4f910 (July 28th changes)
                       {expandedSections.coachNotes && (
                         <div className="px-4 pb-4">
                           <RunnerCoachNotes runner={runner} />
@@ -584,30 +529,7 @@ const KnowYourRunner = ({
                       )}
                     </div>
 
-<<<<<<< HEAD
-                    {/* Bio & Background */}
-                    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                      <button
-                        onClick={() => toggleSection('bio')}
-                        className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-center space-x-3">
-                          <User className="h-5 w-5 text-green-600" />
-                          <span className="font-medium text-gray-900">Bio & Background</span>
-                        </div>
-                        <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform duration-200 ${
-                          expandedSections.bio ? 'rotate-180' : ''
-                        }`} />
-                      </button>
-                      {expandedSections.bio && (
-                        <div className="px-4 pb-4">
-                          <RunnerBio runner={runner} />
-                        </div>
-                      )}
-                    </div>
-=======
 
->>>>>>> ff4f910 (July 28th changes)
 
                     {/* Family Members */}
                     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -646,11 +568,7 @@ const KnowYourRunner = ({
                       </button>
                       {expandedSections.clubHistory && (
                         <div className="px-4 pb-4">
-<<<<<<< HEAD
-                          <div className="text-gray-600">Club history information will be displayed here.</div>
-=======
                           <RunnerClubHistory runner={runner} />
->>>>>>> ff4f910 (July 28th changes)
                         </div>
                       )}
                     </div>
@@ -710,8 +628,6 @@ const KnowYourRunner = ({
           </div>
         )}
       </div>
-<<<<<<< HEAD
-=======
 
       {/* Transfer Program Modal */}
       {showTransferModal && transferRunner && (
@@ -891,7 +807,6 @@ const KnowYourRunner = ({
           </div>
         </div>
       )}
->>>>>>> ff4f910 (July 28th changes)
     </div>
   );
 };
