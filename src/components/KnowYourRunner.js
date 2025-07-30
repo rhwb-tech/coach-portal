@@ -244,7 +244,9 @@ const KnowYourRunner = ({
         action_type: 'Transfer Runner',
         runner_email_id: transferRunner.email_id,
         requestor_email_id: coachEmail || 'unknown@example.com',
-        comments: transferComment.trim() || null
+        comments: transferComment.trim() || null,
+        current_program: transferRunner.race_distance,
+        new_program: selectedProgram
       };
       
       console.log('Transfer data:', transferData);
@@ -308,7 +310,7 @@ const KnowYourRunner = ({
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Filters */}
-      <div className="mb-8 relative z-30">
+      <div className="mb-8 relative z-10">
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-sm border border-gray-200">
           <div className="flex flex-col gap-4">
             {/* Filter Chips */}

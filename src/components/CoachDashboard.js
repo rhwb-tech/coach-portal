@@ -6,6 +6,7 @@ import { supabase } from '../services/supabaseClient';
 import RHWBConnect from './RHWBConnect';
 import KnowYourRunner from './KnowYourRunner';
 import SmallCouncil from './SmallCouncil';
+import UserGuide from './UserGuide';
 
 const CoachDashboard = () => {
   const { user, isLoading } = useAuth();
@@ -44,6 +45,7 @@ const CoachDashboard = () => {
   // Help menu states
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [showUserGuide, setShowUserGuide] = useState(false);
   const [feedbackType, setFeedbackType] = useState('');
   const [feedbackNote, setFeedbackNote] = useState('');
   
@@ -579,8 +581,7 @@ const CoachDashboard = () => {
 
   const handleUserGuideClick = () => {
     setHelpMenuOpen(false);
-    // TODO: Implement user guide functionality
-    alert('User Guide will be implemented soon!');
+    setShowUserGuide(true);
   };
 
   const handleFeedbackSubmit = async () => {
@@ -805,23 +806,23 @@ const CoachDashboard = () => {
                     onClick={handleHelpMenuToggle}
                     className="p-1 rounded-lg hover:bg-gray-100 transition-colors duration-200"
                   >
-                    <HelpCircle className="h-4 w-4 text-gray-500" />
+                    <HelpCircle className="h-6 w-6 text-gray-500" />
                   </button>
                   
                   {helpMenuOpen && (
-                    <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 min-w-[160px]">
+                    <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-3 z-[99999] min-w-[200px]">
                       <button
                         onClick={handleFeedbackClick}
-                        className="w-full text-left px-4 py-2 text-sm transition-colors flex items-center space-x-2 text-gray-700 hover:bg-gray-50"
+                        className="w-full text-left px-6 py-3 text-base transition-colors flex items-center space-x-3 text-gray-700 hover:bg-gray-50"
                       >
-                        <MessageSquare className="w-4 h-4" />
+                        <MessageSquare className="w-5 h-5" />
                         <span>Feedback</span>
                       </button>
                       <button
                         onClick={handleUserGuideClick}
-                        className="w-full text-left px-4 py-2 text-sm transition-colors flex items-center space-x-2 text-gray-700 hover:bg-gray-50"
+                        className="w-full text-left px-6 py-3 text-base transition-colors flex items-center space-x-3 text-gray-700 hover:bg-gray-50"
                       >
-                        <BookOpen className="w-4 h-4" />
+                        <BookOpen className="w-5 h-5" />
                         <span>User Guide</span>
                       </button>
                     </div>
@@ -1224,6 +1225,11 @@ const CoachDashboard = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* User Guide Modal */}
+      {showUserGuide && (
+        <UserGuide onClose={() => setShowUserGuide(false)} />
       )}
     </div>
   );

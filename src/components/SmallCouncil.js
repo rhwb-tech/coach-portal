@@ -7,70 +7,174 @@ const SmallCouncil = ({ coachEmail }) => {
   const [deferralRequests, setDeferralRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [runnerDetails, setRunnerDetails] = useState({});
+  const [coachNames, setCoachNames] = useState({});
+  const [activeTab, setActiveTab] = useState('transfer'); // 'transfer' or 'deferral'
+  const [showCompleted, setShowCompleted] = useState(false); // NEW: toggle for showing completed requests
 
   // Load action requests from database
-  useEffect(() => {
-    const loadActionRequests = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  const loadActionRequests = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-        // Fetch transfer requests
-        const { data: transferData, error: transferError } = await supabase
-          .from('rhwb_action_requests')
-          .select('*')
-          .eq('action_type', 'Transfer Runner')
-          .order('created_at', { ascending: false });
+      // Fetch transfer requests
+      let transferQuery = supabase
+        .from('rhwb_action_requests')
+        .select('*')
+        .eq('action_type', 'Transfer Runner')
+        .order('created_at', { ascending: false });
 
-        if (transferError) {
-          console.error('Error fetching transfer requests:', transferError);
-          throw transferError;
-        }
-
-        // Fetch deferral requests
-        const { data: deferralData, error: deferralError } = await supabase
-          .from('rhwb_action_requests')
-          .select('*')
-          .eq('action_type', 'Defer Runner')
-          .order('created_at', { ascending: false });
-
-        if (deferralError) {
-          console.error('Error fetching deferral requests:', deferralError);
-          throw deferralError;
-        }
-
-        setTransferRequests(transferData || []);
-        setDeferralRequests(deferralData || []);
-
-      } catch (error) {
-        console.error('Failed to load action requests:', error);
-        setError('Failed to load action requests. Please try again.');
-      } finally {
-        setLoading(false);
+      // Apply status filter if not showing completed
+      if (!showCompleted) {
+        transferQuery = transferQuery.eq('status', 'pending');
       }
-    };
 
+      const { data: transferData, error: transferError } = await transferQuery;
+      
+      console.log('Transfer data:', transferData);
+      console.log('Show completed:', showCompleted);
+
+      if (transferError) {
+        console.error('Error fetching transfer requests:', transferError);
+        throw transferError;
+      }
+
+      // Fetch deferral requests
+      let deferralQuery = supabase
+        .from('rhwb_action_requests')
+        .select('*')
+        .eq('action_type', 'Defer Runner')
+        .order('created_at', { ascending: false });
+
+      // Apply status filter if not showing completed
+      if (!showCompleted) {
+        deferralQuery = deferralQuery.eq('status', 'pending');
+      }
+
+      const { data: deferralData, error: deferralError } = await deferralQuery;
+      
+      console.log('Deferral data:', deferralData);
+
+      if (deferralError) {
+        console.error('Error fetching deferral requests:', deferralError);
+        throw deferralError;
+      }
+
+      setTransferRequests(transferData || []);
+      setDeferralRequests(deferralData || []);
+
+      // Load runner and coach details for transfer requests
+      if (transferData && transferData.length > 0) {
+        const runnerEmails = [...new Set(transferData.map(r => r.runner_email_id))];
+        const coachEmails = [...new Set(transferData.map(r => r.requestor_email_id))];
+        
+        // Load runner details
+        const runnerDetailsMap = {};
+        console.log('Loading runner details for emails:', runnerEmails);
+        for (const email of runnerEmails) {
+          const details = await getRunnerDetails(email);
+          runnerDetailsMap[email] = details;
+        }
+        console.log('Runner details map:', runnerDetailsMap);
+        setRunnerDetails(runnerDetailsMap);
+        
+        // Load coach names
+        const coachNamesMap = {};
+        for (const email of coachEmails) {
+          const name = await getCoachName(email);
+          coachNamesMap[email] = name;
+        }
+        setCoachNames(coachNamesMap);
+      }
+
+    } catch (error) {
+      console.error('Failed to load action requests:', error);
+      setError('Failed to load action requests. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     loadActionRequests();
-  }, [coachEmail]);
+  }, [coachEmail, showCompleted]);
 
   // Get runner details for display
   const getRunnerDetails = async (emailId) => {
     try {
+      console.log('Fetching runner details for email:', emailId);
+      
+      // Try to get runner name from runners_profile table
       const { data, error } = await supabase
         .from('runners_profile')
-        .select('runner_name, race_distance, location')
+        .select('runner_name')
         .eq('email_id', emailId)
         .single();
 
       if (error) {
         console.error('Error fetching runner details:', error);
-        return { runner_name: 'Unknown Runner', race_distance: 'N/A', location: 'N/A' };
+        // If RLS is blocking access, try a different approach
+        // For now, return the email as the name
+        return { runner_name: emailId, race_distance: 'N/A', location: 'N/A' };
       }
 
-      return data || { runner_name: 'Unknown Runner', race_distance: 'N/A', location: 'N/A' };
+      console.log('Runner details found:', data);
+      return { 
+        runner_name: data?.runner_name || emailId, 
+        race_distance: 'N/A', 
+        location: 'N/A' 
+      };
     } catch (error) {
       console.error('Error fetching runner details:', error);
-      return { runner_name: 'Unknown Runner', race_distance: 'N/A', location: 'N/A' };
+      return { runner_name: emailId, race_distance: 'N/A', location: 'N/A' };
+    }
+  };
+
+  // Get coach name for display
+  const getCoachName = async (emailId) => {
+    try {
+      const { data, error } = await supabase
+        .from('rhwb_coaches')
+        .select('coach')
+        .eq('email_id', emailId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching coach name:', error);
+        return emailId; // Fallback to email if coach name not found
+      }
+
+      return data?.coach || emailId;
+    } catch (error) {
+      console.error('Error fetching coach name:', error);
+      return emailId;
+    }
+  };
+
+  // Handle closing a transfer request
+  const handleCloseTransfer = async (requestId) => {
+    try {
+      const { error } = await supabase
+        .from('rhwb_action_requests')
+        .update({ 
+          status: 'closed',
+          closed_date: new Date().toISOString()
+        })
+        .eq('id', requestId);
+
+      if (error) {
+        console.error('Error closing transfer request:', error);
+        alert('Failed to close transfer request. Please try again.');
+        return;
+      }
+
+      // Refresh the data
+      loadActionRequests();
+      alert('Transfer request closed successfully!');
+    } catch (error) {
+      console.error('Error closing transfer request:', error);
+      alert('Failed to close transfer request. Please try again.');
     }
   };
 
@@ -101,6 +205,13 @@ const SmallCouncil = ({ coachEmail }) => {
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
             <XCircle className="w-3 h-3 mr-1" />
             Rejected
+          </span>
+        );
+      case 'closed':
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+            <CheckCircle className="w-3 h-3 mr-1" />
+            Closed
           </span>
         );
       case 'pending':
@@ -144,100 +255,168 @@ const SmallCouncil = ({ coachEmail }) => {
         <p className="text-gray-600">Review and manage transfer and deferral requests</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Transfer Requests Section */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center mb-6">
-            <Users className="h-6 w-6 text-blue-600 mr-3" />
-            <h2 className="text-xl font-bold text-gray-900">Transfer Requests</h2>
-            <span className="ml-auto bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
-              {transferRequests.length}
+      {/* Tabs */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 mb-6">
+        <div className="flex items-center justify-between border-b border-gray-200">
+          <div className="flex">
+            <button
+              onClick={() => setActiveTab('transfer')}
+              className={`flex items-center space-x-2 px-6 py-4 font-medium transition-colors ${
+                activeTab === 'transfer'
+                  ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <Users className="h-5 w-5" />
+              <span>Transfer Requests</span>
+              <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded-full">
+                {transferRequests.length}
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveTab('deferral')}
+              className={`flex items-center space-x-2 px-6 py-4 font-medium transition-colors ${
+                activeTab === 'deferral'
+                  ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <Clock className="h-5 w-5" />
+              <span>Deferral Requests</span>
+              <span className="bg-orange-100 text-orange-800 text-xs font-medium px-2 py-0.5 rounded-full">
+                {deferralRequests.length}
             </span>
+            </button>
           </div>
-
-          {transferRequests.length === 0 ? (
-            <div className="text-center py-8">
-              <Users className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-              <p className="text-gray-500">No transfer requests found.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {transferRequests.map((request, index) => (
-                <div key={request.id || index} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 mb-1">
-                        {request.runner_email_id}
-                      </h3>
-                      <p className="text-sm text-gray-600 mb-2">
-                        Requested by: {request.requestor_email_id}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {formatDate(request.created_at)}
-                      </p>
-                    </div>
-                    {getStatusBadge(request.status)}
-                  </div>
-                  
-                  {request.comments && (
-                    <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                      <p className="text-sm text-gray-700">
-                        <span className="font-medium">Comments:</span> {request.comments}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Deferral Requests Section */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center mb-6">
-            <Clock className="h-6 w-6 text-orange-600 mr-3" />
-            <h2 className="text-xl font-bold text-gray-900">Deferral Requests</h2>
-            <span className="ml-auto bg-orange-100 text-orange-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
-              {deferralRequests.length}
-            </span>
+          <div className="flex items-center space-x-2 px-6 py-4">
+            <input
+              type="checkbox"
+              id="showCompleted"
+              checked={showCompleted}
+              onChange={(e) => setShowCompleted(e.target.checked)}
+              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+            />
+            <label htmlFor="showCompleted" className="text-sm text-gray-700 font-medium">
+              Show completed requests
+            </label>
           </div>
-
-          {deferralRequests.length === 0 ? (
-            <div className="text-center py-8">
-              <Clock className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-              <p className="text-gray-500">No deferral requests found.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {deferralRequests.map((request, index) => (
-                <div key={request.id || index} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 mb-1">
-                        {request.runner_email_id}
-                      </h3>
-                      <p className="text-sm text-gray-600 mb-2">
-                        Requested by: {request.requestor_email_id}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {formatDate(request.created_at)}
-                      </p>
-                    </div>
-                    {getStatusBadge(request.status)}
-                  </div>
-                  
-                  {request.comments && (
-                    <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                      <p className="text-sm text-gray-700">
-                        <span className="font-medium">Comments:</span> {request.comments}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
+      </div>
+
+      {/* Tab Content */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+        {activeTab === 'transfer' ? (
+          /* Transfer Requests Content */
+          <div>
+            <div className="flex items-center mb-6">
+              <Users className="h-6 w-6 text-blue-600 mr-3" />
+              <h2 className="text-xl font-bold text-gray-900">Transfer Requests</h2>
+            </div>
+
+            {transferRequests.length === 0 ? (
+              <div className="text-center py-8">
+                <Users className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                <p className="text-gray-500">No transfer requests found.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {transferRequests.map((request, index) => {
+                  const runnerDetail = runnerDetails[request.runner_email_id];
+                  const coachName = coachNames[request.requestor_email_id];
+
+                  return (
+                    <div key={request.id || index} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <h3 className="font-semibold text-gray-900">
+                              {runnerDetail?.runner_name || request.runner_email_id}
+                            </h3>
+                            <span className="text-sm text-gray-500">
+                              ({request.runner_email_id})
+                            </span>
+                          </div>
+                          
+                          {/* Transfer Details - All on one line */}
+                          <div className="mb-2">
+                            <p className="text-sm text-gray-600">
+                              <span className="font-medium">Transfer:</span> {request.current_program || 'Unknown'} → {request.new_program || 'Unknown'} • 
+                              <span className="font-medium"> Requested by:</span> {coachName || request.requestor_email_id} • 
+                              {formatDate(request.created_at)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          {getStatusBadge(request.status)}
+                          {request.status !== 'closed' && (
+                            <button
+                              onClick={() => handleCloseTransfer(request.id)}
+                              className="px-3 py-1 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition-colors"
+                            >
+                              Mark Completed
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {request.comments && (
+                        <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                          <p className="text-sm text-gray-700">
+                            <span className="font-medium">Comments:</span> {request.comments}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Deferral Requests Content */
+          <div>
+            <div className="flex items-center mb-6">
+              <Clock className="h-6 w-6 text-orange-600 mr-3" />
+              <h2 className="text-xl font-bold text-gray-900">Deferral Requests</h2>
+            </div>
+
+            {deferralRequests.length === 0 ? (
+              <div className="text-center py-8">
+                <Clock className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                <p className="text-gray-500">No deferral requests found.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {deferralRequests.map((request, index) => (
+                  <div key={request.id || index} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-900 mb-1">
+                          {request.runner_email_id}
+                        </h3>
+                        <p className="text-sm text-gray-600 mb-2">
+                          Requested by: {request.requestor_email_id}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {formatDate(request.created_at)}
+                        </p>
+                      </div>
+                      {getStatusBadge(request.status)}
+                    </div>
+                    
+                    {request.comments && (
+                      <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                        <p className="text-sm text-gray-700">
+                          <span className="font-medium">Comments:</span> {request.comments}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
