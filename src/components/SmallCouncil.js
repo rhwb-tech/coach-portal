@@ -247,48 +247,50 @@ const SmallCouncil = ({ coachEmail }) => {
     );
   }
 
-  return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Small Council</h1>
-        <p className="text-gray-600">Review and manage transfer and deferral requests</p>
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Small Council</h1>
+        <p className="text-sm sm:text-base text-gray-600">Review and manage transfer and deferral requests</p>
       </div>
 
       {/* Tabs */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 mb-6">
-        <div className="flex items-center justify-between border-b border-gray-200">
-          <div className="flex">
+      <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-200 mb-4 sm:mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-200">
+          <div className="flex flex-1">
             <button
               onClick={() => setActiveTab('transfer')}
-              className={`flex items-center space-x-2 px-6 py-4 font-medium transition-colors ${
+              className={`flex items-center space-x-1 sm:space-x-2 px-3 sm:px-6 py-3 sm:py-4 font-medium transition-colors text-sm sm:text-base flex-1 sm:flex-none ${
                 activeTab === 'transfer'
                   ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
               }`}
             >
-              <Users className="h-5 w-5" />
-              <span>Transfer Requests</span>
-              <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded-full">
+              <Users className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="hidden sm:inline">Transfer Requests</span>
+              <span className="sm:hidden">Transfer</span>
+              <span className="bg-blue-100 text-blue-800 text-xs font-medium px-1.5 sm:px-2 py-0.5 rounded-full">
                 {transferRequests.length}
               </span>
             </button>
             <button
               onClick={() => setActiveTab('deferral')}
-              className={`flex items-center space-x-2 px-6 py-4 font-medium transition-colors ${
+              className={`flex items-center space-x-1 sm:space-x-2 px-3 sm:px-6 py-3 sm:py-4 font-medium transition-colors text-sm sm:text-base flex-1 sm:flex-none ${
                 activeTab === 'deferral'
                   ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
               }`}
             >
-              <Clock className="h-5 w-5" />
-              <span>Deferral Requests</span>
-              <span className="bg-orange-100 text-orange-800 text-xs font-medium px-2 py-0.5 rounded-full">
+              <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="hidden sm:inline">Deferral Requests</span>
+              <span className="sm:hidden">Deferral</span>
+              <span className="bg-orange-100 text-orange-800 text-xs font-medium px-1.5 sm:px-2 py-0.5 rounded-full">
                 {deferralRequests.length}
-            </span>
+              </span>
             </button>
           </div>
-          <div className="flex items-center space-x-2 px-6 py-4">
+          <div className="flex items-center justify-center sm:justify-end space-x-2 px-4 sm:px-6 py-3 sm:py-4 border-t sm:border-t-0 border-gray-200">
             <input
               type="checkbox"
               id="showCompleted"
@@ -296,7 +298,7 @@ const SmallCouncil = ({ coachEmail }) => {
               onChange={(e) => setShowCompleted(e.target.checked)}
               className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
             />
-            <label htmlFor="showCompleted" className="text-sm text-gray-700 font-medium">
+            <label htmlFor="showCompleted" className="text-xs sm:text-sm text-gray-700 font-medium">
               Show completed requests
             </label>
           </div>
@@ -304,54 +306,58 @@ const SmallCouncil = ({ coachEmail }) => {
       </div>
 
       {/* Tab Content */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+      <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-200 p-4 sm:p-6">
         {activeTab === 'transfer' ? (
           /* Transfer Requests Content */
           <div>
-            <div className="flex items-center mb-6">
-              <Users className="h-6 w-6 text-blue-600 mr-3" />
-              <h2 className="text-xl font-bold text-gray-900">Transfer Requests</h2>
+            <div className="flex items-center mb-4 sm:mb-6">
+              <Users className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600 mr-2 sm:mr-3" />
+              <h2 className="text-lg sm:text-xl font-bold text-gray-900">Transfer Requests</h2>
             </div>
 
             {transferRequests.length === 0 ? (
-              <div className="text-center py-8">
-                <Users className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                <p className="text-gray-500">No transfer requests found.</p>
+              <div className="text-center py-6 sm:py-8">
+                <Users className="h-8 w-8 sm:h-12 sm:w-12 mx-auto mb-3 sm:mb-4 text-gray-300" />
+                <p className="text-sm sm:text-base text-gray-500">No transfer requests found.</p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 {transferRequests.map((request, index) => {
                   const runnerDetail = runnerDetails[request.runner_email_id];
                   const coachName = coachNames[request.requestor_email_id];
 
                   return (
-                    <div key={request.id || index} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-2 mb-2">
-                            <h3 className="font-semibold text-gray-900">
+                    <div key={request.id || index} className="border border-gray-200 rounded-lg p-3 sm:p-4 hover:shadow-md transition-shadow">
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-3">
+                        <div className="flex-1 mb-3 sm:mb-0">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 mb-2">
+                            <h3 className="font-semibold text-gray-900 text-sm sm:text-base">
                               {runnerDetail?.runner_name || request.runner_email_id}
                             </h3>
-                            <span className="text-sm text-gray-500">
+                            <span className="text-xs sm:text-sm text-gray-500">
                               ({request.runner_email_id})
                             </span>
                           </div>
                           
-                          {/* Transfer Details - All on one line */}
+                          {/* Transfer Details - Responsive layout */}
                           <div className="mb-2">
-                            <p className="text-sm text-gray-600">
-                              <span className="font-medium">Transfer:</span> {request.current_program || 'Unknown'} → {request.new_program || 'Unknown'} • 
-                              <span className="font-medium"> Requested by:</span> {coachName || request.requestor_email_id} • 
+                            <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">
+                              <span className="font-medium">Transfer:</span> {request.current_program || 'Unknown'} → {request.new_program || 'Unknown'}
+                              <span className="hidden sm:inline"> • </span>
+                              <br className="sm:hidden" />
+                              <span className="font-medium">Requested by:</span> {coachName || request.requestor_email_id}
+                              <span className="hidden sm:inline"> • </span>
+                              <br className="sm:hidden" />
                               {formatDate(request.created_at)}
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center justify-between sm:justify-end space-x-2">
                           {getStatusBadge(request.status)}
                           {request.status !== 'closed' && (
                             <button
                               onClick={() => handleCloseTransfer(request.id)}
-                              className="px-3 py-1 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition-colors"
+                              className="px-2 sm:px-3 py-1 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition-colors"
                             >
                               Mark Completed
                             </button>
@@ -360,8 +366,8 @@ const SmallCouncil = ({ coachEmail }) => {
                       </div>
                       
                       {request.comments && (
-                        <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                          <p className="text-sm text-gray-700">
+                        <div className="mt-3 p-2 sm:p-3 bg-gray-50 rounded-lg">
+                          <p className="text-xs sm:text-sm text-gray-700">
                             <span className="font-medium">Comments:</span> {request.comments}
                           </p>
                         </div>
@@ -375,38 +381,40 @@ const SmallCouncil = ({ coachEmail }) => {
         ) : (
           /* Deferral Requests Content */
           <div>
-            <div className="flex items-center mb-6">
-              <Clock className="h-6 w-6 text-orange-600 mr-3" />
-              <h2 className="text-xl font-bold text-gray-900">Deferral Requests</h2>
+            <div className="flex items-center mb-4 sm:mb-6">
+              <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600 mr-2 sm:mr-3" />
+              <h2 className="text-lg sm:text-xl font-bold text-gray-900">Deferral Requests</h2>
             </div>
 
             {deferralRequests.length === 0 ? (
-              <div className="text-center py-8">
-                <Clock className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                <p className="text-gray-500">No deferral requests found.</p>
+              <div className="text-center py-6 sm:py-8">
+                <Clock className="h-8 w-8 sm:h-12 sm:w-12 mx-auto mb-3 sm:mb-4 text-gray-300" />
+                <p className="text-sm sm:text-base text-gray-500">No deferral requests found.</p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 {deferralRequests.map((request, index) => (
-                  <div key={request.id || index} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900 mb-1">
+                  <div key={request.id || index} className="border border-gray-200 rounded-lg p-3 sm:p-4 hover:shadow-md transition-shadow">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-3">
+                      <div className="flex-1 mb-3 sm:mb-0">
+                        <h3 className="font-semibold text-gray-900 text-sm sm:text-base mb-1">
                           {request.runner_email_id}
                         </h3>
-                        <p className="text-sm text-gray-600 mb-2">
+                        <p className="text-xs sm:text-sm text-gray-600 mb-2">
                           Requested by: {request.requestor_email_id}
                         </p>
-                        <p className="text-sm text-gray-500">
+                        <p className="text-xs sm:text-sm text-gray-500">
                           {formatDate(request.created_at)}
                         </p>
                       </div>
-                      {getStatusBadge(request.status)}
+                      <div className="flex items-center justify-between sm:justify-end">
+                        {getStatusBadge(request.status)}
+                      </div>
                     </div>
                     
                     {request.comments && (
-                      <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                        <p className="text-sm text-gray-700">
+                      <div className="mt-3 p-2 sm:p-3 bg-gray-50 rounded-lg">
+                        <p className="text-xs sm:text-sm text-gray-700">
                           <span className="font-medium">Comments:</span> {request.comments}
                         </p>
                       </div>
