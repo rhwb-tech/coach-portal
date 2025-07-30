@@ -729,14 +729,14 @@ const CoachDashboard = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       {/* Header */}
-      <div className="bg-white/90 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-20">
+      <div className="bg-white/90 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14 sm:h-16">
             <div className="flex items-center space-x-2 sm:space-x-3">
               {/* Hamburger Menu Button */}
               <button
                 onClick={() => setHamburgerMenuOpen(!hamburgerMenuOpen)}
-                className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 lg:hidden hamburger-menu"
+                className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 lg:hidden hamburger-menu z-10"
               >
                 {hamburgerMenuOpen ? (
                   <X className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" />
@@ -799,6 +799,39 @@ const CoachDashboard = () => {
             </div>
             
             <div className="flex items-center space-x-2 sm:space-x-4">
+              {/* Mobile: Coach name and help icon */}
+              <div className="flex sm:hidden items-center space-x-2 text-xs text-gray-600">
+                <span className="truncate max-w-20">{user?.name || coachName || 'Unknown'}</span>
+                <div className="relative help-menu">
+                  <button
+                    onClick={handleHelpMenuToggle}
+                    className="p-1 rounded-lg hover:bg-gray-100 transition-colors duration-200"
+                  >
+                    <HelpCircle className="h-5 w-5 text-gray-500" />
+                  </button>
+                  
+                  {helpMenuOpen && (
+                    <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-3 z-[99999] min-w-[160px]">
+                      <button
+                        onClick={handleFeedbackClick}
+                        className="w-full text-left px-4 py-2 text-sm transition-colors flex items-center space-x-2 text-gray-700 hover:bg-gray-50"
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                        <span>Feedback</span>
+                      </button>
+                      <button
+                        onClick={handleUserGuideClick}
+                        className="w-full text-left px-4 py-2 text-sm transition-colors flex items-center space-x-2 text-gray-700 hover:bg-gray-50"
+                      >
+                        <BookOpen className="w-4 h-4" />
+                        <span>User Guide</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Desktop: Coach name and help icon */}
               <div className="hidden sm:flex items-center space-x-2 text-xs sm:text-sm text-gray-600">
                 <span className="hidden md:inline">Coach: {user?.name || coachName || 'Unknown'}</span>
                 <span className="md:hidden">{user?.name || coachName || 'Unknown'}</span>
@@ -837,7 +870,7 @@ const CoachDashboard = () => {
 
       {/* Hamburger Menu Dropdown */}
       {hamburgerMenuOpen && (
-        <div className="lg:hidden absolute top-14 sm:top-16 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-gray-200 shadow-lg z-[60] hamburger-menu">
+        <div className="lg:hidden absolute top-14 sm:top-16 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-gray-200 shadow-lg z-[60] hamburger-menu sticky">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
             <div className="space-y-1 sm:space-y-2">
               <button
