@@ -2,34 +2,63 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Save, Loader2, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
+import { useAuth } from '../contexts/AuthContext';
 
 const RunnerCoachNotes = ({ runner }) => {
+  const { user } = useAuth();
+  console.log('RunnerCoachNotes - user object:', user);
+  console.log('RunnerCoachNotes - user.name:', user?.name);
   const [notes, setNotes] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [noteToDelete, setNoteToDelete] = useState(null);
+  const [coachName, setCoachName] = useState(null);
 
   // Get coach email from URL parameters or auth context
   const getCoachEmail = () => {
     const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get('coach') || 'balajisankaran@gmail.com'; // fallback
+    return urlParams.get('coach') || user?.email || 'balajisankaran@gmail.com'; // fallback
   };
 
   const coachEmail = getCoachEmail();
 
+  // Load coach name from database
+  useEffect(() => {
+    const loadCoachName = async () => {
+      if (!coachEmail) return;
+      
+      try {
+        const { data: coachData, error: coachError } = await supabase
+          .from('rhwb_coaches')
+          .select('coach')
+          .ilike('email_id', coachEmail)
+          .single();
+        
+        if (!coachError && coachData) {
+          setCoachName(coachData.coach);
+        }
+      } catch (error) {
+        console.error('Failed to fetch coach name:', error);
+      }
+    };
+
+    loadCoachName();
+  }, [coachEmail]);
+
   // Load existing notes when component mounts
   useEffect(() => {
     const loadNotes = async () => {
-      if (!runner?.email_id) return;
+      if (!runner?.email_id || !coachEmail) return;
       
       try {
         setIsLoading(true);
         const { data, error } = await supabase
           .from('profile_notes')
           .select('id, note, note_ts, delete_flag, comment_by')
-          .eq('email_id', runner.email_id)
+          .ilike('email_id', runner.email_id)
+          .ilike('comment_by', coachEmail)
           .eq('delete_flag', false) // Only load non-deleted notes
           .order('note_ts', { ascending: false });
         
@@ -76,7 +105,7 @@ const RunnerCoachNotes = ({ runner }) => {
 
   // Save a specific note
   const saveNote = async (noteIndex) => {
-    if (!runner?.email_id) return;
+    if (!runner?.email_id || !coachEmail) return;
     
     const noteToSave = notes[noteIndex];
     if (!noteToSave.note.trim()) {
@@ -143,7 +172,7 @@ const RunnerCoachNotes = ({ runner }) => {
       const { error: updateError } = await supabase
         .from('runners_profile')
         .update({ notes_present: true })
-        .eq('email_id', runner.email_id);
+        .ilike('email_id', runner.email_id);
       
       if (updateError) {
         console.error('Failed to update notes_present:', updateError);
@@ -212,7 +241,7 @@ const RunnerCoachNotes = ({ runner }) => {
         const { error: updateError } = await supabase
           .from('runners_profile')
           .update({ notes_present: false })
-          .eq('email_id', runner.email_id);
+          .ilike('email_id', runner.email_id);
         
         if (updateError) {
           console.error('Failed to update notes_present:', updateError);
@@ -272,9 +301,27 @@ const RunnerCoachNotes = ({ runner }) => {
 
   // Get coach name from email
   const getCoachName = (email) => {
-    // Extract name from email (simple implementation)
+    // Use the same logic as the header - prioritize JWT token name, then database, then fallback to email
+    console.log('getCoachName called with email:', email);
+    console.log('user object:', user);
+    console.log('user.name:', user?.name);
+    console.log('coachName from database:', coachName);
+    
+    if (user?.name) {
+      console.log('Returning user.name:', user.name);
+      return user.name;
+    }
+    
+    if (coachName) {
+      console.log('Returning coachName from database:', coachName);
+      return coachName;
+    }
+    
+    // Fallback: Extract name from email (simple implementation)
     const name = email.split('@')[0];
-    return name.charAt(0).toUpperCase() + name.slice(1);
+    const fallbackName = name.charAt(0).toUpperCase() + name.slice(1);
+    console.log('Returning fallback name:', fallbackName);
+    return fallbackName;
   };
 
   if (isLoading) {
@@ -292,7 +339,7 @@ const RunnerCoachNotes = ({ runner }) => {
     <div className="space-y-4">
       {/* Notes Table */}
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse">
+        <table className="w-full border-collapse table-fixed">
           <tbody>
             {notes.length === 0 ? (
               <tr>
@@ -304,13 +351,13 @@ const RunnerCoachNotes = ({ runner }) => {
             ) : (
               notes.map((note, index) => (
                 <tr key={note.id || index} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="py-3 px-4 text-sm text-gray-600">
+                  <td className="py-3 px-4 text-sm text-gray-600 w-32">
                     {new Date(note.note_ts).toLocaleString()}
                   </td>
-                  <td className="py-3 px-4 text-sm text-gray-600">
+                  <td className="py-3 px-4 text-sm text-gray-600 w-32">
                     {getCoachName(note.comment_by)}
                   </td>
-                  <td className="py-3 px-4">
+                  <td className="py-3 px-4 text-left">
                     {note.isEditing ? (
                       <textarea
                         value={note.note}
@@ -325,8 +372,8 @@ const RunnerCoachNotes = ({ runner }) => {
                       </div>
                     )}
                   </td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center space-x-2">
+                  <td className="py-3 px-4 text-right w-24">
+                    <div className="flex items-center justify-end space-x-2">
                       {note.isEditing ? (
                         <>
                           <button

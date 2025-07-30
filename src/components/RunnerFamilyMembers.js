@@ -22,90 +22,74 @@ const RunnerFamilyMembers = ({ runner }) => {
     return age;
   };
 
+  // Load family members data when component mounts
   useEffect(() => {
-    const fetchFamilyMembers = async () => {
-      if (!runner || !runner.email_id) {
-        setFamilyMembers([]);
-        return;
-      }
-
-      setIsLoading(true);
-      setError(null);
-
+    const loadFamilyData = async () => {
+      if (!runner?.email_id) return;
+      
       try {
-        // First, get the full_address for the selected runner
-        const { data: runnerAddressData, error: addressError } = await supabase
-          .from('runners_household')
-          .select('full_address')
-          .eq('email_id', runner.email_id)
-          .single();
+        setIsLoading(true);
         
-        if (addressError || !runnerAddressData) {
-          setFamilyMembers([]);
-          setIsLoading(false);
-          return;
-        }
-        
-        const runnerFullAddress = runnerAddressData.full_address;
-        
-        // Now get all household members with the same address, excluding the selected runner
-        const { data, error } = await supabase
+        // Get household members
+        const { data: householdData, error: householdError } = await supabase
           .from('runners_household')
           .select('*')
-          .eq('full_address', runnerFullAddress)
-          .neq('email_id', runner.email_id);
+          .ilike('email_id', runner.email_id);
         
-        if (error || !data) {
+        if (householdError) {
+          console.error('Error loading household data:', householdError);
           setFamilyMembers([]);
-          setIsLoading(false);
           return;
         }
-
-        // Fetch gender and runner_name for each household member from runners_profile
-        const emailIds = data.map((member) => member.email_id);
         
-        let profileMap = {};
-        if (emailIds.length > 0) {
-          const { data: profiles, error: profileError } = await supabase
-            .from('runners_profile')
-            .select('email_id, gender, runner_name')
-            .in('email_id', emailIds);
-          
-          if (!profileError && profiles) {
-            profileMap = profiles.reduce((acc, profile) => {
-              acc[profile.email_id] = profile;
-              return acc;
-            }, {});
-          }
+        // Get additional household members
+        const { data: additionalMembers, error: additionalError } = await supabase
+          .from('runners_household')
+          .select('*')
+          .ilike('email_id', runner.email_id)
+          .neq('relationship', 'Self');
+        
+        if (additionalError) {
+          console.error('Error loading additional members:', additionalError);
         }
-
-        // Merge profile data into household data and format for display
-        const formattedMembers = data.map((member) => {
-          const age = calculateAge(member.dob);
-          const profile = profileMap[member.email_id] || {};
-          const gender = profile.gender || '';
-          const displayName = profile.runner_name || 'Unknown';
-          
-          return {
-            ...member,
-            displayName,
-            age,
-            gender,
-            ageGender: age !== null ? `${age} ${gender}` : gender || 'N/A'
-          };
-        });
-
-        setFamilyMembers(formattedMembers);
+        
+        // Combine and process the data
+        const allMembers = [...(householdData || []), ...(additionalMembers || [])];
+        setFamilyMembers(allMembers);
+        
       } catch (error) {
-        console.error('Error fetching family members:', error);
-        setError('Failed to load family members');
+        console.error('Error loading family data:', error);
+        setFamilyMembers([]);
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchFamilyMembers();
-  }, [runner]);
+    loadFamilyData();
+  }, [runner?.email_id]);
+
+  // Load runner profile for additional info
+  useEffect(() => {
+    const loadRunnerProfile = async () => {
+      if (!runner?.email_id) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('runners_profile')
+          .select('*')
+          .ilike('email_id', runner.email_id)
+          .single();
+        
+        if (!error && data) {
+          // setRunnerProfile(data); // This state variable is not defined in the original file
+        }
+      } catch (error) {
+        console.error('Error loading runner profile:', error);
+      }
+    };
+
+    loadRunnerProfile();
+  }, [runner?.email_id]);
 
   if (isLoading) {
     return (

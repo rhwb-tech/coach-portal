@@ -8,40 +8,32 @@ const RunnerClubHistory = ({ runner }) => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchSeasonHistory = async () => {
-      if (!runner || !runner.email_id) {
-        setSeasonHistory([]);
-        return;
-      }
-
-      setIsLoading(true);
-      setError(null);
-
+    const loadClubHistory = async () => {
+      if (!runner?.email_id) return;
+      
       try {
+        setIsLoading(true);
         const { data, error } = await supabase
           .from('runner_season_info')
-          .select('season, race_distance, coach')
-          .eq('email_id', runner.email_id)
+          .select('*')
+          .ilike('email_id', runner.email_id)
           .order('season', { ascending: false });
-
-        if (error) {
-          console.error('Error fetching season history:', error);
-          setError('Failed to load season history');
-          setSeasonHistory([]);
+        
+        if (!error && data) {
+          setSeasonHistory(data);
         } else {
-          setSeasonHistory(data || []);
+          setSeasonHistory([]);
         }
       } catch (error) {
-        console.error('Error fetching season history:', error);
-        setError('Failed to load season history');
+        console.error('Error loading club history:', error);
         setSeasonHistory([]);
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchSeasonHistory();
-  }, [runner]);
+    loadClubHistory();
+  }, [runner?.email_id]);
 
   if (isLoading) {
     return (

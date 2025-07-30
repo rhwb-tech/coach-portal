@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Info, Save, TrendingUp, ChevronDown, Menu, X } from 'lucide-react';
+import { Search, Info, Save, TrendingUp, ChevronDown, Menu, X, HelpCircle, MessageSquare, BookOpen } from 'lucide-react';
 import { fetchCoachData, updateAthleteData, calculateCompletionRate, getAvatarInitials } from '../services/coachService';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../services/supabaseClient';
 import RHWBConnect from './RHWBConnect';
 import KnowYourRunner from './KnowYourRunner';
+import SmallCouncil from './SmallCouncil';
 
 const CoachDashboard = () => {
   const { user, isLoading } = useAuth();
@@ -39,6 +40,12 @@ const CoachDashboard = () => {
   const [distanceMenuOpen, setDistanceMenuOpen] = useState(false);
   const [mesoMenuOpen, setMesoMenuOpen] = useState(false);
   const [hamburgerMenuOpen, setHamburgerMenuOpen] = useState(false);
+  
+  // Help menu states
+  const [helpMenuOpen, setHelpMenuOpen] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackType, setFeedbackType] = useState('');
+  const [feedbackNote, setFeedbackNote] = useState('');
   
   // Navigation state
   const [currentView, setCurrentView] = useState('know-your-runner'); // 'dashboard', 'rhwb-connect', or 'know-your-runner'
@@ -520,6 +527,9 @@ const CoachDashboard = () => {
       if (!event.target.closest('.hamburger-menu')) {
         setHamburgerMenuOpen(false);
       }
+      if (!event.target.closest('.help-menu')) {
+        setHelpMenuOpen(false);
+      }
     };
 
     // Use click instead of mousedown to avoid race condition with button clicks
@@ -554,6 +564,57 @@ const CoachDashboard = () => {
   const handleAutocompleteSelect = (name) => {
     setSearchTerm(name);
     setShowAutocomplete(false);
+  };
+
+  // Help menu handlers
+  const handleHelpMenuToggle = (event) => {
+    event.stopPropagation();
+    setHelpMenuOpen(!helpMenuOpen);
+  };
+
+  const handleFeedbackClick = () => {
+    setHelpMenuOpen(false);
+    setShowFeedbackModal(true);
+  };
+
+  const handleUserGuideClick = () => {
+    setHelpMenuOpen(false);
+    // TODO: Implement user guide functionality
+    alert('User Guide will be implemented soon!');
+  };
+
+  const handleFeedbackSubmit = async () => {
+    if (!feedbackType || !feedbackNote.trim()) {
+      alert('Please select a type and enter your feedback.');
+      return;
+    }
+
+    try {
+      // Submit feedback to rhwb_helpdesk_requests table
+      const { data, error } = await supabase
+        .from('rhwb_helpdesk_requests')
+        .insert([{
+          coach_email: coachEmail,
+          created_at: new Date().toISOString(),
+          feedback_type: feedbackType,
+          request: feedbackNote.trim()
+        }]);
+
+      if (error) {
+        console.error('Failed to submit feedback:', error);
+        alert('Failed to submit feedback. Please try again.');
+        return;
+      }
+
+      console.log('Feedback submitted successfully:', data);
+      alert('Thank you for your feedback!');
+      setShowFeedbackModal(false);
+      setFeedbackType('');
+      setFeedbackNote('');
+    } catch (error) {
+      console.error('Failed to submit feedback:', error);
+      alert('Failed to submit feedback. Please try again.');
+    }
   };
 
   const InfoTooltip = ({ children, tooltip }) => {
@@ -723,12 +784,49 @@ const CoachDashboard = () => {
           >
             Runner Metrics
           </button>
+          <button
+            onClick={() => setCurrentView('small-council')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
+              currentView === 'small-council'
+                ? 'bg-blue-100 text-blue-700'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+          >
+            Small Council
+          </button>
         </div>
             </div>
             
             <div className="flex items-center space-x-4">
               <div className="hidden md:flex items-center space-x-2 text-sm text-gray-600">
                 <span>Coach: {user?.name || coachName || 'Unknown'}</span>
+                <div className="relative help-menu">
+                  <button
+                    onClick={handleHelpMenuToggle}
+                    className="p-1 rounded-lg hover:bg-gray-100 transition-colors duration-200"
+                  >
+                    <HelpCircle className="h-4 w-4 text-gray-500" />
+                  </button>
+                  
+                  {helpMenuOpen && (
+                    <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 min-w-[160px]">
+                      <button
+                        onClick={handleFeedbackClick}
+                        className="w-full text-left px-4 py-2 text-sm transition-colors flex items-center space-x-2 text-gray-700 hover:bg-gray-50"
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                        <span>Feedback</span>
+                      </button>
+                      <button
+                        onClick={handleUserGuideClick}
+                        className="w-full text-left px-4 py-2 text-sm transition-colors flex items-center space-x-2 text-gray-700 hover:bg-gray-50"
+                      >
+                        <BookOpen className="w-4 h-4" />
+                        <span>User Guide</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -778,6 +876,19 @@ const CoachDashboard = () => {
                 }`}
               >
                 Runner Metrics
+              </button>
+              <button
+                onClick={() => {
+                  setCurrentView('small-council');
+                  setHamburgerMenuOpen(false);
+                }}
+                className={`w-full text-left px-4 py-3 rounded-lg transition-colors duration-200 font-medium ${
+                  currentView === 'small-council' 
+                    ? 'bg-blue-50 text-blue-700' 
+                    : 'text-gray-700 hover:bg-gray-50 hover:text-blue-600'
+                }`}
+              >
+                Small Council
               </button>
             </div>
           </div>
@@ -1019,6 +1130,8 @@ const CoachDashboard = () => {
       </div>
       ) : currentView === 'rhwb-connect' ? (
         <RHWBConnect />
+      ) : currentView === 'small-council' ? (
+        <SmallCouncil coachEmail={coachEmail} />
       ) : (
         <KnowYourRunner 
           cohortData={cohortData}
@@ -1032,6 +1145,85 @@ const CoachDashboard = () => {
           currentSeason={currentSeason}
           coachEmail={coachEmail}
         />
+      )}
+
+      {/* Feedback Modal */}
+      {showFeedbackModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div className="flex items-center space-x-3">
+                <MessageSquare className="h-6 w-6 text-blue-600" />
+                <h2 className="text-xl font-bold text-gray-900">Feedback</h2>
+              </div>
+              <button
+                onClick={() => {
+                  setShowFeedbackModal(false);
+                  setFeedbackType('');
+                  setFeedbackNote('');
+                }}
+                className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              {/* Feedback Type Dropdown */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Feedback Type *
+                </label>
+                <select
+                  value={feedbackType}
+                  onChange={(e) => setFeedbackType(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Select a type</option>
+                  <option value="bug">Bug</option>
+                  <option value="data-issue">Data Issue</option>
+                  <option value="feature-request">Feature Request</option>
+                </select>
+              </div>
+
+              {/* Feedback Note */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Details *
+                </label>
+                <textarea
+                  value={feedbackNote}
+                  onChange={(e) => setFeedbackNote(e.target.value)}
+                  placeholder="Please describe your feedback in detail..."
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  rows={4}
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end space-x-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowFeedbackModal(false);
+                  setFeedbackType('');
+                  setFeedbackNote('');
+                }}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleFeedbackSubmit}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              >
+                Submit Feedback
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

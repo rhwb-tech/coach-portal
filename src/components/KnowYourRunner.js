@@ -5,6 +5,7 @@ import RunnerCoachNotes from './RunnerCoachNotes';
 import RunnerBio from './RunnerBio';
 import RunnerFamilyMembers from './RunnerFamilyMembers';
 import RunnerClubHistory from './RunnerClubHistory';
+import RunnerOnboardingSurvey from './RunnerOnboardingSurvey';
 
 const KnowYourRunner = ({ 
   cohortData = [], 
@@ -27,6 +28,8 @@ const KnowYourRunner = ({
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [transferRunner, setTransferRunner] = useState(null);
   const [selectedProgram, setSelectedProgram] = useState(null);
+  const [transferComment, setTransferComment] = useState('');
+  const [pendingTransfers, setPendingTransfers] = useState(new Set());
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [notesRunner, setNotesRunner] = useState(null);
   const [notesContent, setNotesContent] = useState('');
@@ -208,9 +211,17 @@ const KnowYourRunner = ({
     }, 1000); // 1 second delay
   };
 
-  // Handle program selection (shows confirmation modal)
+  // Handle program selection (updates selected program in transfer modal)
   const handleProgramSelection = (newProgram) => {
     setSelectedProgram(newProgram);
+  };
+
+  // Handle submit button click (shows confirmation modal)
+  const handleTransferSubmit = () => {
+    if (!selectedProgram) {
+      alert('Please select a program first.');
+      return;
+    }
     setShowTransferModal(false);
     setShowConfirmationModal(true);
   };
@@ -222,6 +233,7 @@ const KnowYourRunner = ({
       console.log('Coach email:', coachEmail);
       console.log('Transfer runner:', transferRunner);
       console.log('Selected program:', selectedProgram);
+      console.log('Transfer comment:', transferComment);
       
       // Check authentication
       const { data: { session }, error: authError } = await supabase.auth.getSession();
@@ -231,7 +243,8 @@ const KnowYourRunner = ({
       const transferData = {
         action_type: 'Transfer Runner',
         runner_email_id: transferRunner.email_id,
-        requestor_email_id: coachEmail || 'unknown@example.com'
+        requestor_email_id: coachEmail || 'unknown@example.com',
+        comments: transferComment.trim() || null
       };
       
       console.log('Transfer data:', transferData);
@@ -265,13 +278,14 @@ const KnowYourRunner = ({
 
       console.log('Transfer request submitted successfully:', data);
       
+      // Mark this runner as having a pending transfer
+      setPendingTransfers(prev => new Set([...prev, transferRunner.email_id]));
+      
       // Close modals and reset state
       setShowConfirmationModal(false);
       setTransferRunner(null);
       setSelectedProgram(null);
-      
-      // Show success message
-      alert('Transfer request submitted successfully!');
+      setTransferComment('');
       
     } catch (error) {
       console.error('Failed to submit transfer request:', error);
@@ -470,12 +484,17 @@ const KnowYourRunner = ({
                           <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 min-w-[160px]">
                             <button
                               onClick={() => handleTransferRunner(runner)}
-                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center space-x-2"
+                              disabled={pendingTransfers.has(runner.email_id)}
+                              className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center space-x-2 ${
+                                pendingTransfers.has(runner.email_id)
+                                  ? 'text-gray-400 cursor-not-allowed'
+                                  : 'text-gray-700 hover:bg-gray-50'
+                              }`}
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                               </svg>
-                              <span>Transfer Runner</span>
+                              <span>{pendingTransfers.has(runner.email_id) ? 'Transfer Pending' : 'Transfer Runner'}</span>
                             </button>
                           </div>
                         )}
@@ -589,7 +608,7 @@ const KnowYourRunner = ({
                       </button>
                       {expandedSections.onboarding && (
                         <div className="px-4 pb-4">
-                          <div className="text-gray-600">Onboarding survey responses will be displayed here.</div>
+                          <RunnerOnboardingSurvey runner={runner} />
                         </div>
                       )}
                     </div>
@@ -652,32 +671,77 @@ const KnowYourRunner = ({
               <p className="text-gray-700 mb-4">Select a new program:</p>
 
               {/* Program Options */}
-              <div className="space-y-2">
+              <div className="space-y-2 mb-6">
                 {['Lite', '5K', '10K', 'Half Marathon', 'Full Marathon'].map((program) => (
                   <button
                     key={program}
                     onClick={() => handleProgramSelection(program)}
-                    className="w-full flex items-center justify-between p-3 text-left border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                    className={`w-full flex items-center justify-between p-3 text-left border rounded-lg transition-colors ${
+                      selectedProgram === program 
+                        ? 'border-blue-500 bg-blue-50 text-blue-700' 
+                        : 'border-gray-200 hover:bg-gray-50 text-gray-900'
+                    }`}
                   >
-                    <span className="font-medium text-gray-900">{program}</span>
-                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
+                    <span className="font-medium">{program}</span>
+                    {selectedProgram === program ? (
+                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    )}
                   </button>
                 ))}
+              </div>
+
+              {/* Selected Program Display */}
+              {selectedProgram && (
+                <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-700 mb-1">Selected Program:</p>
+                  <p className="font-medium text-blue-900">{selectedProgram}</p>
+                </div>
+              )}
+
+              {/* Comment Section */}
+              <div className="border-t border-gray-200 pt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Comments (Optional)
+                </label>
+                <textarea
+                  value={transferComment}
+                  onChange={(e) => setTransferComment(e.target.value)}
+                  placeholder="Add any comments about this transfer request..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  rows={3}
+                />
               </div>
             </div>
 
             {/* Footer */}
-            <div className="flex justify-center p-6 border-t border-gray-200">
+            <div className="flex justify-between p-6 border-t border-gray-200">
               <button
                 onClick={() => {
                   setShowTransferModal(false);
                   setTransferRunner(null);
+                  setSelectedProgram(null);
+                  setTransferComment('');
                 }}
                 className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
               >
                 Cancel
+              </button>
+              <button
+                onClick={handleTransferSubmit}
+                disabled={!selectedProgram}
+                className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                  selectedProgram 
+                    ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                Submit
               </button>
             </div>
           </div>
@@ -709,6 +773,12 @@ const KnowYourRunner = ({
                   <span className="text-gray-600">To:</span>
                   <span className="font-medium text-blue-600">{selectedProgram}</span>
                 </div>
+                {transferComment.trim() && (
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <span className="text-gray-600 block mb-1">Comments:</span>
+                    <span className="text-gray-900 text-sm">{transferComment}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -719,6 +789,7 @@ const KnowYourRunner = ({
                   setShowConfirmationModal(false);
                   setTransferRunner(null);
                   setSelectedProgram(null);
+                  setTransferComment('');
                 }}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
               >
