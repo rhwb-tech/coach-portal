@@ -735,8 +735,12 @@ const CoachDashboard = () => {
             <div className="flex items-center space-x-2 sm:space-x-3">
               {/* Hamburger Menu Button */}
               <button
-                onClick={() => setHamburgerMenuOpen(!hamburgerMenuOpen)}
-                className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 lg:hidden hamburger-menu z-10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setHamburgerMenuOpen(!hamburgerMenuOpen);
+                }}
+                className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 lg:hidden hamburger-menu relative z-20 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                style={{ pointerEvents: 'auto' }}
               >
                 {hamburgerMenuOpen ? (
                   <X className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" />
@@ -811,7 +815,7 @@ const CoachDashboard = () => {
                   </button>
                   
                   {helpMenuOpen && (
-                    <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-3 z-[99999] min-w-[160px]">
+                    <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-3 z-30 min-w-[160px]">
                       <button
                         onClick={handleFeedbackClick}
                         className="w-full text-left px-4 py-2 text-sm transition-colors flex items-center space-x-2 text-gray-700 hover:bg-gray-50"
@@ -844,7 +848,7 @@ const CoachDashboard = () => {
                   </button>
                   
                   {helpMenuOpen && (
-                    <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-3 z-[99999] min-w-[180px] sm:min-w-[200px]">
+                    <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-3 z-30 min-w-[180px] sm:min-w-[200px]">
                       <button
                         onClick={handleFeedbackClick}
                         className="w-full text-left px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base transition-colors flex items-center space-x-2 sm:space-x-3 text-gray-700 hover:bg-gray-50"
@@ -870,7 +874,7 @@ const CoachDashboard = () => {
 
       {/* Hamburger Menu Dropdown */}
       {hamburgerMenuOpen && (
-        <div className="lg:hidden absolute top-14 sm:top-16 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-gray-200 shadow-lg z-[60] hamburger-menu sticky">
+        <div className="lg:hidden absolute top-14 sm:top-16 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-gray-200 shadow-lg z-40 hamburger-menu">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
             <div className="space-y-1 sm:space-y-2">
               <button

@@ -337,82 +337,138 @@ const RunnerCoachNotes = ({ runner }) => {
 
   return (
     <div className="space-y-4">
-      {/* Notes Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse table-fixed">
-          <tbody>
-            {notes.length === 0 ? (
-              <tr>
-                <td colSpan="4" className="text-center py-8 text-gray-500">
-                  <FileText className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                  <p>No notes yet. Click "Add Note" to get started.</p>
-                </td>
-              </tr>
-            ) : (
-              notes.map((note, index) => (
-                <tr key={note.id || index} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="py-3 px-4 text-sm text-gray-600 w-32">
-                    {new Date(note.note_ts).toLocaleString()}
-                  </td>
-                  <td className="py-3 px-4 text-sm text-gray-600 w-32">
-                    {getCoachName(note.comment_by)}
-                  </td>
-                  <td className="py-3 px-4 text-left">
-                    {note.isEditing ? (
-                      <textarea
-                        value={note.note}
-                        onChange={(e) => handleNoteChange(index, e.target.value)}
-                        placeholder="Write your note here..."
-                        className="w-full h-20 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent resize-none text-sm"
-                        disabled={isSaving}
-                      />
-                    ) : (
-                      <div className="text-sm text-gray-700 whitespace-pre-wrap">
-                        {note.note}
-                      </div>
-                    )}
-                  </td>
-                  <td className="py-3 px-4 text-right w-24">
-                    <div className="flex items-center justify-end space-x-2">
-                      {note.isEditing ? (
-                        <>
-                          <button
-                            onClick={() => handleSaveNote(index)}
-                            disabled={isSaving}
-                            className="text-green-600 hover:text-green-700 text-sm"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => handleCancelEdit(index)}
-                            className="text-gray-500 hover:text-gray-700 text-sm"
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => handleEditNote(index)}
-                            className="text-blue-600 hover:text-blue-700 text-sm"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => showDeleteWarning(index)}
-                            className="text-red-600 hover:text-red-700 text-sm"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </>
-                      )}
+      {/* Notes List */}
+      <div className="space-y-3">
+        {notes.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <FileText className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+            <p>No notes yet. Click "Add Note" to get started.</p>
+          </div>
+        ) : (
+          notes.map((note, index) => (
+            <div key={note.id || index} className="border border-gray-200 rounded-lg p-3 sm:p-4 bg-white">
+              {/* Desktop: Table-like layout */}
+              <div className="hidden sm:grid sm:grid-cols-12 sm:gap-4 sm:items-start">
+                <div className="sm:col-span-3 text-sm text-gray-600">
+                  {new Date(note.note_ts).toLocaleString()}
+                </div>
+                <div className="sm:col-span-2 text-sm text-gray-600">
+                  {getCoachName(note.comment_by)}
+                </div>
+                <div className="sm:col-span-5">
+                  {note.isEditing ? (
+                    <textarea
+                      value={note.note}
+                      onChange={(e) => handleNoteChange(index, e.target.value)}
+                      placeholder="Write your note here..."
+                      className="w-full h-20 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent resize-none text-sm"
+                      disabled={isSaving}
+                    />
+                  ) : (
+                    <div className="text-sm text-gray-700 whitespace-pre-wrap">
+                      {note.note}
                     </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+                  )}
+                </div>
+                <div className="sm:col-span-2 text-right">
+                  <div className="flex items-center justify-end space-x-2">
+                    {note.isEditing ? (
+                      <>
+                        <button
+                          onClick={() => handleSaveNote(index)}
+                          disabled={isSaving}
+                          className="text-green-600 hover:text-green-700 text-sm"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => handleCancelEdit(index)}
+                          className="text-gray-500 hover:text-gray-700 text-sm"
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleEditNote(index)}
+                          className="text-blue-600 hover:text-blue-700 text-sm"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => showDeleteWarning(index)}
+                          className="text-red-600 hover:text-red-700 text-sm"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Mobile: Stacked layout */}
+              <div className="sm:hidden space-y-2">
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                  <span>{new Date(note.note_ts).toLocaleString()}</span>
+                  <span>{getCoachName(note.comment_by)}</span>
+                </div>
+                
+                <div>
+                  {note.isEditing ? (
+                    <textarea
+                      value={note.note}
+                      onChange={(e) => handleNoteChange(index, e.target.value)}
+                      placeholder="Write your note here..."
+                      className="w-full h-20 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent resize-none text-sm"
+                      disabled={isSaving}
+                    />
+                  ) : (
+                    <div className="text-sm text-gray-700 whitespace-pre-wrap">
+                      {note.note}
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex items-center justify-end space-x-3 pt-2">
+                  {note.isEditing ? (
+                    <>
+                      <button
+                        onClick={() => handleSaveNote(index)}
+                        disabled={isSaving}
+                        className="text-green-600 hover:text-green-700 text-sm font-medium"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={() => handleCancelEdit(index)}
+                        className="text-gray-500 hover:text-gray-700 text-sm font-medium"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => handleEditNote(index)}
+                        className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => showDeleteWarning(index)}
+                        className="text-red-600 hover:text-red-700 text-sm"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))
+        )}
       </div>
       
       {/* Delete Confirmation Modal */}
