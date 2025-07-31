@@ -16,12 +16,32 @@ const RunnerClubHistory = ({ runner }) => {
         const { data, error } = await supabase
           .from('runner_season_info')
           .select('*')
-          .ilike('email_id', runner.email_id)
-          .order('season', { ascending: false });
+          .ilike('email_id', runner.email_id);
         
         if (!error && data) {
-          setSeasonHistory(data);
+          console.log('Raw club history data:', data);
+          
+          // Sort by season in descending order (newest first)
+          const sortedData = data.sort((a, b) => {
+            // Extract numeric part from season (handle cases like "Season 14", "14", etc.)
+            const getSeasonNumber = (seasonStr) => {
+              if (!seasonStr) return 0;
+              const match = seasonStr.toString().match(/\d+/);
+              return match ? parseInt(match[0]) : 0;
+            };
+            
+            const seasonA = getSeasonNumber(a.season);
+            const seasonB = getSeasonNumber(b.season);
+            
+            console.log(`Comparing seasons: ${a.season}(${seasonA}) vs ${b.season}(${seasonB})`);
+            
+            return seasonB - seasonA; // Descending order (newest first)
+          });
+          
+          console.log('Sorted club history data:', sortedData);
+          setSeasonHistory(sortedData);
         } else {
+          console.log('No data found or error:', error);
           setSeasonHistory([]);
         }
       } catch (error) {
@@ -62,6 +82,10 @@ const RunnerClubHistory = ({ runner }) => {
 
   return (
     <div>
+      <div className="flex items-center gap-2 mb-3">
+        <Clock className="h-4 w-4 text-blue-600" />
+        <h3 className="text-sm font-medium text-gray-700">Season History (Newest First)</h3>
+      </div>
       <ul className="space-y-2">
         {seasonHistory.map((season, index) => (
           <li key={`${season.season}-${index}`} className="flex justify-between items-center py-2">

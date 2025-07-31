@@ -803,36 +803,9 @@ const CoachDashboard = () => {
             </div>
             
             <div className="flex items-center space-x-2 sm:space-x-4">
-              {/* Mobile: Coach name and help icon */}
+              {/* Mobile: Coach name only (no help icon) */}
               <div className="flex sm:hidden items-center space-x-2 text-xs text-gray-600">
                 <span className="truncate max-w-20">{user?.name || coachName || 'Unknown'}</span>
-                <div className="relative help-menu">
-                  <button
-                    onClick={handleHelpMenuToggle}
-                    className="p-1 rounded-lg hover:bg-gray-100 transition-colors duration-200"
-                  >
-                    <HelpCircle className="h-5 w-5 text-gray-500" />
-                  </button>
-                  
-                  {helpMenuOpen && (
-                    <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-3 z-30 min-w-[160px]">
-                      <button
-                        onClick={handleFeedbackClick}
-                        className="w-full text-left px-4 py-2 text-sm transition-colors flex items-center space-x-2 text-gray-700 hover:bg-gray-50"
-                      >
-                        <MessageSquare className="w-4 h-4" />
-                        <span>Feedback</span>
-                      </button>
-                      <button
-                        onClick={handleUserGuideClick}
-                        className="w-full text-left px-4 py-2 text-sm transition-colors flex items-center space-x-2 text-gray-700 hover:bg-gray-50"
-                      >
-                        <BookOpen className="w-4 h-4" />
-                        <span>User Guide</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
               </div>
               
               {/* Desktop: Coach name and help icon */}
@@ -874,61 +847,88 @@ const CoachDashboard = () => {
 
       {/* Hamburger Menu Dropdown */}
       {hamburgerMenuOpen && (
-        <div className="lg:hidden absolute top-14 sm:top-16 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-gray-200 shadow-lg z-40 hamburger-menu">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
-            <div className="space-y-1 sm:space-y-2">
-              <button
-                onClick={() => {
-                  setCurrentView('know-your-runner');
-                  setHamburgerMenuOpen(false);
-                }}
-                className={`w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-lg transition-colors duration-200 font-medium text-sm sm:text-base ${
-                  currentView === 'know-your-runner' 
-                    ? 'bg-blue-50 text-blue-700' 
-                    : 'text-gray-700 hover:bg-gray-50 hover:text-blue-600'
-                }`}
-              >
-                Know Your Runner
-              </button>
-              <button
-                onClick={() => {
-                  setCurrentView('rhwb-connect');
-                  setHamburgerMenuOpen(false);
-                }}
-                className={`w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-lg transition-colors duration-200 font-medium text-sm sm:text-base ${
-                  currentView === 'rhwb-connect' 
-                    ? 'bg-blue-50 text-blue-700' 
-                    : 'text-gray-700 hover:bg-gray-50 hover:text-blue-600'
-                }`}
-              >
-                OneRHWB
-              </button>
-              <button
-                onClick={() => {
-                  setCurrentView('dashboard');
-                  setHamburgerMenuOpen(false);
-                }}
-                className={`w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-lg transition-colors duration-200 font-medium text-sm sm:text-base ${
-                  currentView === 'dashboard' 
-                    ? 'bg-blue-50 text-blue-700' 
-                    : 'text-gray-700 hover:bg-gray-50 hover:text-blue-600'
-                }`}
-              >
-                Runner Metrics
-              </button>
-              <button
-                onClick={() => {
-                  setCurrentView('small-council');
-                  setHamburgerMenuOpen(false);
-                }}
-                className={`w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-lg transition-colors duration-200 font-medium text-sm sm:text-base ${
-                  currentView === 'small-council' 
-                    ? 'bg-blue-50 text-blue-700' 
-                    : 'text-gray-700 hover:bg-gray-50 hover:text-blue-600'
-                }`}
-              >
-                Small Council
-              </button>
+        <div className="lg:hidden absolute top-14 sm:top-16 left-0 right-0 z-40 hamburger-menu">
+          <div className="bg-gray-800 border border-gray-600 shadow-2xl mx-4 mt-2 rounded-xl">
+            <div className="px-4 sm:px-6 py-3 sm:py-4">
+              <div className="space-y-1 sm:space-y-2">
+                <button
+                  onClick={() => {
+                    setCurrentView('know-your-runner');
+                    setHamburgerMenuOpen(false);
+                  }}
+                  className={`w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-lg transition-colors duration-200 font-medium text-sm sm:text-base ${
+                    currentView === 'know-your-runner' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'text-gray-200 hover:bg-gray-700 hover:text-white'
+                  }`}
+                >
+                  Know Your Runner
+                </button>
+                <button
+                  onClick={() => {
+                    setCurrentView('rhwb-connect');
+                    setHamburgerMenuOpen(false);
+                  }}
+                  className={`w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-lg transition-colors duration-200 font-medium text-sm sm:text-base ${
+                    currentView === 'rhwb-connect' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'text-gray-200 hover:bg-gray-700 hover:text-white'
+                  }`}
+                >
+                  OneRHWB
+                </button>
+                <button
+                  onClick={() => {
+                    setCurrentView('dashboard');
+                    setHamburgerMenuOpen(false);
+                  }}
+                  className={`w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-lg transition-colors duration-200 font-medium text-sm sm:text-base ${
+                    currentView === 'dashboard' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'text-gray-200 hover:bg-gray-700 hover:text-white'
+                  }`}
+                >
+                  Runner Metrics
+                </button>
+                <button
+                  onClick={() => {
+                    setCurrentView('small-council');
+                    setHamburgerMenuOpen(false);
+                  }}
+                  className={`w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-lg transition-colors duration-200 font-medium text-sm sm:text-base ${
+                    currentView === 'small-council' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'text-gray-200 hover:bg-gray-700 hover:text-white'
+                  }`}
+                >
+                  Small Council
+                </button>
+                
+                {/* Separator */}
+                <div className="border-t border-gray-600 my-2"></div>
+                
+                {/* Help Options */}
+                <button
+                  onClick={() => {
+                    handleFeedbackClick();
+                    setHamburgerMenuOpen(false);
+                  }}
+                  className="w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-lg transition-colors duration-200 font-medium text-sm sm:text-base text-gray-200 hover:bg-gray-700 hover:text-white flex items-center space-x-2"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>Feedback</span>
+                </button>
+                <button
+                  onClick={() => {
+                    handleUserGuideClick();
+                    setHamburgerMenuOpen(false);
+                  }}
+                  className="w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-lg transition-colors duration-200 font-medium text-sm sm:text-base text-gray-200 hover:bg-gray-700 hover:text-white flex items-center space-x-2"
+                >
+                  <BookOpen className="w-4 h-4" />
+                  <span>User Guide</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -25,37 +25,42 @@ const RunnerFamilyMembers = ({ runner }) => {
   // Load family members data when component mounts
   useEffect(() => {
     const loadFamilyData = async () => {
-      if (!runner?.email_id) return;
+      if (!runner?.runner_name) return;
       
       try {
         setIsLoading(true);
         
-        // Get household members
-        const { data: householdData, error: householdError } = await supabase
+        // Step 1: Find the runner by name in the runners_household table
+        const { data: runnerData, error: runnerError } = await supabase
           .from('runners_household')
-          .select('*')
-          .ilike('email_id', runner.email_id);
+          .select('full_address')
+          .ilike('runner_name', runner.runner_name)
+          .single();
         
-        if (householdError) {
-          console.error('Error loading household data:', householdError);
+        if (runnerError || !runnerData) {
+          console.error('Error finding runner in household table:', runnerError);
           setFamilyMembers([]);
           return;
         }
         
-        // Get additional household members
-        const { data: additionalMembers, error: additionalError } = await supabase
+        const runnerAddress = runnerData.full_address;
+        console.log('Found runner address:', runnerAddress);
+        
+        // Step 2: Find all family members with the same address (excluding the runner)
+        const { data: familyData, error: familyError } = await supabase
           .from('runners_household')
           .select('*')
-          .ilike('email_id', runner.email_id)
-          .neq('relationship', 'Self');
+          .eq('full_address', runnerAddress)
+          .neq('runner_name', runner.runner_name); // Exclude the runner themselves
         
-        if (additionalError) {
-          console.error('Error loading additional members:', additionalError);
+        if (familyError) {
+          console.error('Error loading family members:', familyError);
+          setFamilyMembers([]);
+          return;
         }
         
-        // Combine and process the data
-        const allMembers = [...(householdData || []), ...(additionalMembers || [])];
-        setFamilyMembers(allMembers);
+        console.log('Found family members:', familyData);
+        setFamilyMembers(familyData || []);
         
       } catch (error) {
         console.error('Error loading family data:', error);
@@ -66,30 +71,7 @@ const RunnerFamilyMembers = ({ runner }) => {
     };
 
     loadFamilyData();
-  }, [runner?.email_id]);
-
-  // Load runner profile for additional info
-  useEffect(() => {
-    const loadRunnerProfile = async () => {
-      if (!runner?.email_id) return;
-      
-      try {
-        const { data, error } = await supabase
-          .from('runners_profile')
-          .select('*')
-          .ilike('email_id', runner.email_id)
-          .single();
-        
-        if (!error && data) {
-          // setRunnerProfile(data); // This state variable is not defined in the original file
-        }
-      } catch (error) {
-        console.error('Error loading runner profile:', error);
-      }
-    };
-
-    loadRunnerProfile();
-  }, [runner?.email_id]);
+  }, [runner?.runner_name]);
 
   if (isLoading) {
     return (
@@ -121,7 +103,7 @@ const RunnerFamilyMembers = ({ runner }) => {
       <ul className="space-y-2">
         {familyMembers.map((member, index) => (
           <li key={member.email_id || index} className="flex justify-between items-center py-2">
-            <span className="text-blue-600 font-medium">{member.displayName}</span>
+            <span className="text-blue-600 font-medium">{member.runner_name}</span>
             <span className="text-gray-500">{member.ageGender}</span>
           </li>
         ))}

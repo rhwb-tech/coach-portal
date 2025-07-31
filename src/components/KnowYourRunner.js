@@ -513,39 +513,55 @@ const KnowYourRunner = ({
 
                 {/* Accordion Sections - Only show when runner is selected */}
                 {selectedRunner?.email_id === runner.email_id && (
-                  <div className="space-y-2 sm:space-y-3 ml-2 sm:ml-4">
+                  <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 sm:p-6 mt-4">
+                    <div className="space-y-2 sm:space-y-3">
                     {/* Coach Notes */}
                     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                      <div className="flex items-center justify-between p-3 sm:p-4">
-                        <button
-                          onClick={() => toggleSection('coachNotes')}
-                          className="flex items-center space-x-2 sm:space-x-3 hover:bg-gray-50 transition-colors rounded-lg p-1.5 sm:p-2"
-                        >
+                      <button
+                        onClick={() => toggleSection('coachNotes')}
+                        className="w-full flex items-center justify-between p-3 sm:p-4 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center space-x-2 sm:space-x-3">
                           <Edit className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
                           <span className="font-medium text-gray-900 text-sm sm:text-base">Coach Notes</span>
-                          <ChevronDown className={`h-4 w-4 sm:h-5 sm:w-5 text-gray-400 transition-transform duration-200 ${
-                            expandedSections.coachNotes ? 'rotate-180' : ''
-                          }`} />
-                        </button>
-                        {expandedSections.coachNotes && (
-                          <button
-                            onClick={() => {
-                              // This will be handled by the RunnerCoachNotes component
-                              if (typeof window !== 'undefined') {
-                                window.dispatchEvent(new CustomEvent('addNote', { 
-                                  detail: { runnerEmail: runner.email_id } 
-                                }));
-                              }
-                            }}
-                            className="flex items-center space-x-1 px-2 sm:px-3 py-1 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-xs sm:text-sm"
-                          >
-                            <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-                            <span>Add Note</span>
-                          </button>
-                        )}
-                      </div>
+                        </div>
+                        <ChevronDown className={`h-4 w-4 sm:h-5 sm:w-5 text-gray-400 transition-transform duration-200 ${
+                          expandedSections.coachNotes ? 'rotate-180' : ''
+                        }`} />
+                      </button>
                       {expandedSections.coachNotes && (
                         <div className="px-3 sm:px-4 pb-3 sm:pb-4">
+                          {/* Informational Message */}
+                          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <div className="flex items-start space-x-2">
+                              <svg className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <div className="text-sm text-blue-800">
+                                <p className="font-medium mb-1">Internal Notes Only</p>
+                                <p className="text-blue-700">Coach notes are for internal purposes only. The runner cannot see these notes.</p>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Add Note Button */}
+                          <div className="mb-4">
+                            <button
+                              onClick={() => {
+                                if (typeof window !== 'undefined') {
+                                  window.dispatchEvent(new CustomEvent('addNote', { 
+                                    detail: { runnerEmail: runner.email_id } 
+                                  }));
+                                }
+                              }}
+                              className="flex items-center space-x-2 px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-sm font-medium"
+                            >
+                              <Plus className="h-4 w-4" />
+                              <span>Add Note</span>
+                            </button>
+                          </div>
+                          
+                          {/* Notes Content */}
                           <RunnerCoachNotes runner={runner} />
                         </div>
                       )}
@@ -555,20 +571,20 @@ const KnowYourRunner = ({
                     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden sm:hidden">
                       <button
                         onClick={() => toggleSection('bio')}
-                        className="w-full flex items-center justify-between p-3 hover:bg-gray-50 transition-colors"
+                        className="w-full flex items-center justify-between p-3 sm:p-4 hover:bg-gray-50 transition-colors"
                       >
-                        <div className="flex items-center space-x-2">
-                          <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="flex items-center space-x-2 sm:space-x-3">
+                          <svg className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                           </svg>
-                          <span className="font-medium text-gray-900 text-sm">Bio</span>
+                          <span className="font-medium text-gray-900 text-sm sm:text-base">Bio</span>
                         </div>
-                        <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${
+                        <ChevronDown className={`h-4 w-4 sm:h-5 sm:w-5 text-gray-400 transition-transform duration-200 ${
                           expandedSections.bio ? 'rotate-180' : ''
                         }`} />
                       </button>
                       {expandedSections.bio && (
-                        <div className="px-3 pb-3 space-y-3">
+                        <div className="px-3 sm:px-4 pb-3 sm:pb-4 space-y-3">
                           {/* Contact Information */}
                           <div className="space-y-2">
                             <h4 className="font-medium text-gray-900 text-sm">Contact Information</h4>
@@ -604,13 +620,9 @@ const KnowYourRunner = ({
                               )}
                             </div>
                           </div>
-                          
-
                         </div>
                       )}
                     </div>
-
-
 
                     {/* Family Members */}
                     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -658,18 +670,18 @@ const KnowYourRunner = ({
                     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                       <button
                         onClick={() => toggleSection('onboarding')}
-                        className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
+                        className="w-full flex items-center justify-between p-3 sm:p-4 hover:bg-gray-50 transition-colors"
                       >
-                        <div className="flex items-center space-x-3">
-                          <FileText className="h-5 w-5 text-indigo-600" />
-                          <span className="font-medium text-gray-900">Onboarding Survey</span>
+                        <div className="flex items-center space-x-2 sm:space-x-3">
+                          <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-600" />
+                          <span className="font-medium text-gray-900 text-sm sm:text-base">Onboarding Survey</span>
                         </div>
-                        <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform duration-200 ${
+                        <ChevronDown className={`h-4 w-4 sm:h-5 sm:w-5 text-gray-400 transition-transform duration-200 ${
                           expandedSections.onboarding ? 'rotate-180' : ''
                         }`} />
                       </button>
                       {expandedSections.onboarding && (
-                        <div className="px-4 pb-4">
+                        <div className="px-3 sm:px-4 pb-3 sm:pb-4">
                           <RunnerOnboardingSurvey runner={runner} />
                         </div>
                       )}
@@ -679,23 +691,24 @@ const KnowYourRunner = ({
                     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                       <button
                         onClick={() => toggleSection('metrics')}
-                        className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
+                        className="w-full flex items-center justify-between p-3 sm:p-4 hover:bg-gray-50 transition-colors"
                       >
-                        <div className="flex items-center space-x-3">
-                          <TrendingUp className="h-5 w-5 text-red-600" />
-                          <span className="font-medium text-gray-900">Season Metrics & Performance</span>
+                        <div className="flex items-center space-x-2 sm:space-x-3">
+                          <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-red-600" />
+                          <span className="font-medium text-gray-900 text-sm sm:text-base">Season Metrics & Performance</span>
                         </div>
-                        <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform duration-200 ${
+                        <ChevronDown className={`h-4 w-4 sm:h-5 sm:w-5 text-gray-400 transition-transform duration-200 ${
                           expandedSections.metrics ? 'rotate-180' : ''
                         }`} />
                       </button>
                       {expandedSections.metrics && (
-                        <div className="px-4 pb-4">
+                        <div className="px-3 sm:px-4 pb-3 sm:pb-4">
                           <div className="text-gray-600">Season metrics and performance data will be displayed here.</div>
                         </div>
                       )}
                     </div>
                   </div>
+                    </div>
                 )}
               </div>
             ))}
