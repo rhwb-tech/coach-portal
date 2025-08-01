@@ -5,7 +5,7 @@ import { supabase } from '../services/supabaseClient';
 const RunnerClubHistory = ({ runner }) => {
   const [seasonHistory, setSeasonHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error] = useState(null);
 
   useEffect(() => {
     const loadClubHistory = async () => {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Users, Search, Edit, TrendingUp, Clock, FileText, Star, ArrowRight, HelpCircle, MessageSquare, BookOpen, ChevronDown } from 'lucide-react';
+import { X, Users, Search, TrendingUp, Clock, ArrowRight, MessageSquare, BookOpen } from 'lucide-react';
 
 const UserGuide = ({ onClose }) => {
   return (

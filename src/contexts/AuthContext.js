@@ -1,170 +1,369 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-
-// JWT decoding utility (without external library)
-function parseJwt(token) {
-  try {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(
-      window.atob(base64)
-        .split('')
-        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-        .join('')
-    );
-    return JSON.parse(jsonPayload);
-  } catch (error) {
-    console.error('Invalid JWT token:', error);
-    return null;
-  }
-}
-
-function isTokenExpired(exp) {
-  // Add 5 minutes buffer time to prevent edge cases
-  const bufferTime = 300;
-  return Date.now() >= (exp * 1000) - (bufferTime * 1000);
-}
+import { supabase } from '../services/supabaseClient';
 
 const AuthContext = createContext();
 
+// Helper function to validate email against v_rhwb_roles view
+const validateEmailAccess = async (email) => {
+  try {
+    // Check Supabase configuration first
+    if (!process.env.REACT_APP_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL.includes('<YOUR_SUPABASE_URL>')) {
+      const fallbackRole = determineUserRole(email);
+      return { isValid: true, role: fallbackRole };
+    }
+    
+    if (!process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY.includes('<YOUR_SUPABASE_ANON_KEY>')) {
+      const fallbackRole = determineUserRole(email);
+      return { isValid: true, role: fallbackRole };
+    }
+    
+    // First, test the connection with a simple query and aggressive timeout
+    let connectionTestPassed = false;
+    
+    try {
+      // Add a very short timeout for the connection test
+      const connectionTimeout = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Connection test timeout')), 3000); // 3 second timeout
+      });
+      
+      // Test connection using the v_rhwb_roles view
+      const connectionTest = supabase
+        .from('v_rhwb_roles')
+        .select('count')
+        .limit(1);
+      
+      const { error: testError } = await Promise.race([connectionTest, connectionTimeout]);
+      
+      if (testError) {
+        if (testError.code === 'PGRST116') {
+          // Fallback to email-based role determination
+          const fallbackRole = determineUserRole(email);
+          return { isValid: true, role: fallbackRole };
+        }
+      } else {
+        connectionTestPassed = true;
+      }
+    } catch (testErr) {
+      // Fallback to email-based role determination
+      const fallbackRole = determineUserRole(email);
+      return { isValid: true, role: fallbackRole };
+    }
+    
+    // Only proceed with database query if connection test passed
+    if (!connectionTestPassed) {
+      const fallbackRole = determineUserRole(email);
+      return { isValid: true, role: fallbackRole };
+    }
+    
+    // Add timeout protection for the main query
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Database query timeout')), 5000); // 5 second timeout
+    });
+    
+    // Query the v_rhwb_roles view (similar to v_pulse_roles in Pulse app)
+    const queryPromise = supabase
+      .from('v_rhwb_roles')
+      .select('email_id, role, full_name')
+      .eq('email_id', email.toLowerCase())
+      .single();
+
+    const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
+
+    if (error) {
+      // Check for specific error types
+      if (error.code === 'PGRST116') {
+        // This means no rows found - user doesn't exist in either table
+        return { 
+          isValid: false, 
+          error: 'This email address is not authorized to access RHWB Connect. Please use the same email address that you registered with RHWB or contact support for access.' 
+        };
+      }
+      
+      if (error.code === '42P01') {
+        // Table or view doesn't exist
+        return { 
+          isValid: false, 
+          error: 'Database configuration error. Please contact support.' 
+        };
+      }
+      
+      if (error.message?.includes('timeout')) {
+        return { isValid: false, error: 'Database connection timeout. Please try again.' };
+      }
+      
+      // Log other errors for debugging but don't expose to user
+      console.warn('Database query error:', error);
+      return { 
+        isValid: false, 
+        error: 'This email address is not authorized to access RHWB Connect. Please use the same email address that you registered with RHWB or contact support for access.' 
+      };
+    }
+
+    if (!data) {
+      return { 
+        isValid: false, 
+        error: 'This email address is not authorized to access RHWB Connect. Please use the same email address that you registered with RHWB or contact support for access.' 
+      };
+    }
+
+    // Return the role and full name from the view
+    return { isValid: true, role: data.role, fullName: data.full_name };
+
+  } catch (error) {
+    // Log the error for debugging but don't expose it to the user
+    console.warn('Authentication validation error:', error);
+    
+    if (error instanceof Error) {
+      if (error.message.includes('timeout')) {
+        const fallbackRole = determineUserRole(email);
+        return { isValid: true, role: fallbackRole };
+      }
+    }
+    
+    // If we can't validate due to database issues, fall back to email-based role
+    const fallbackRole = determineUserRole(email);
+    return { isValid: true, role: fallbackRole };
+  }
+};
+
+// Helper function to determine user role from email
+const determineUserRole = (email) => {
+  // You can customize this logic based on your needs
+  // For now, we'll use a simple email-based approach
+  if (email.includes('admin') || email.includes('manager')) {
+    return 'admin';
+  } else if (email.includes('coach') || email.includes('trainer')) {
+    return 'coach';
+  } else {
+    return 'coach'; // Default to coach for RHWB
+  }
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null);
+  const [session, setSession] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isEmailSent, setIsEmailSent] = useState(false);
+  const [authError, setAuthError] = useState(null);
 
-  // Initialize auth state from stored token or URL parameter
+  // Initialize auth state
   useEffect(() => {
-    const initializeAuth = async () => {
-      let tokenToUse = null;
-      let tokenSource = '';
-      
-      // Priority 1: Check URL parameter
-      const urlParams = new URLSearchParams(window.location.search);
-      const urlToken = urlParams.get('token');
-      if (urlToken) {
-        tokenToUse = urlToken;
-        tokenSource = 'url';
-      }
-      
-      // Priority 2: Check stored token
-      if (!tokenToUse) {
-        const storedToken = localStorage.getItem('coach_portal_auth_token');
-        if (storedToken) {
-          tokenToUse = storedToken;
-          tokenSource = 'storage';
-        }
-      }
-      
-      if (tokenToUse) {
-        const success = await validateAndSetToken(tokenToUse);
-        if (success) {
-          // Store token if it came from URL
-          if (tokenSource === 'url') {
-            localStorage.setItem('coach_portal_auth_token', tokenToUse);
-          }
+    // Get initial session
+    const getInitialSession = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) {
+          console.error('Error getting session:', error);
+          setAuthError(error.message);
+        } else {
+          setSession(session);
           
-          // Clean URL if token came from URL parameter
-          if (tokenSource === 'url') {
+          if (session?.user) {
+            // Validate the authenticated user against roles table
+            const validation = await validateEmailAccess(session.user.email);
+            if (validation.isValid && validation.role) {
+              const authUser = {
+                email: session.user.email,
+                role: validation.role,
+                name: validation.fullName || session.user.user_metadata?.name || session.user.email,
+                id: session.user.id
+              };
+              setUser(authUser);
+            } else {
+              // User is authenticated but not authorized - log them out
+              await supabase.auth.signOut();
+              setUser(null);
+            }
+          } else {
+            // Check for email parameter override
             const urlParams = new URLSearchParams(window.location.search);
-            urlParams.delete('token');
-            const cleanUrl = window.location.pathname + 
-              (urlParams.toString() ? '?' + urlParams.toString() : '');
-            window.history.replaceState({}, document.title, cleanUrl);
+            const overrideEmail = urlParams.get('email');
+            
+            if (overrideEmail) {
+              // Validate the override email
+              const validation = await validateEmailAccess(overrideEmail);
+              if (validation.isValid && validation.role) {
+                // Create a mock user for the override email
+                const authUser = {
+                  email: overrideEmail,
+                  role: validation.role,
+                  name: validation.fullName || overrideEmail,
+                  id: 'override-user'
+                };
+                setUser(authUser);
+                setSession({}); // Mock session
+              }
+            }
           }
-          
-          console.log(`JWT token loaded from: ${tokenSource}`);
         }
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        setAuthError(error.message);
+      } finally {
+        setIsLoading(false);
       }
-      
-      setIsLoading(false);
     };
 
-    initializeAuth();
+    getInitialSession();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('Auth state changed:', event, session?.user?.email);
+        setSession(session);
+        
+        // Check for URL parameter override first
+        const urlParams = new URLSearchParams(window.location.search);
+        const overrideEmail = urlParams.get('email');
+        
+        console.log('URL override check:', { overrideEmail, hasSession: !!session?.user });
+        
+        if (overrideEmail) {
+          console.log('Processing override email:', overrideEmail);
+          // Validate the override email
+          const validation = await validateEmailAccess(overrideEmail);
+          console.log('Override validation result:', validation);
+          
+          if (validation.isValid && validation.role) {
+            // Create a mock user for the override email
+            const authUser = {
+              email: overrideEmail,
+              role: validation.role,
+              name: validation.fullName || overrideEmail,
+              id: 'override-user'
+            };
+            console.log('Setting override user:', authUser);
+            setUser(authUser);
+            setIsLoading(false);
+            setAuthError(null);
+            return; // Exit early, don't process session
+          } else {
+            console.log('Override validation failed:', validation.error);
+          }
+        }
+        
+        if (session?.user) {
+          // Validate the authenticated user against roles table
+          const validation = await validateEmailAccess(session.user.email);
+          if (validation.isValid && validation.role) {
+            const authUser = {
+              email: session.user.email,
+              role: validation.role,
+              name: validation.fullName || session.user.user_metadata?.name || session.user.email,
+              id: session.user.id
+            };
+            setUser(authUser);
+          } else {
+            // User is authenticated but not authorized - log them out
+            await supabase.auth.signOut();
+            setUser(null);
+          }
+        } else {
+          setUser(null);
+        }
+        
+        setIsLoading(false);
+        setAuthError(null);
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const validateAndSetToken = async (tokenString) => {
-    console.log('🔍 Starting JWT token validation...');
-    console.log('Token length:', tokenString.length);
-    console.log('Token preview:', tokenString.substring(0, 50) + '...');
+  // Magic link login
+  const login = async (email, rememberMe = false) => {
+    try {
+      setAuthError(null);
+      setIsLoading(true);
+      
+      // First, validate the email against roles table
+      const validation = await validateEmailAccess(email);
+      
+      if (!validation.isValid) {
+        setIsLoading(false);
+        return { success: false, error: validation.error || 'Email address not authorized' };
+      }
 
-    const payload = parseJwt(tokenString);
-    
-    if (!payload) {
-      console.error('❌ Invalid JWT token format - could not parse payload');
-      return false;
-    }
-
-    console.log('✅ JWT payload parsed successfully:', payload);
-
-    // Check required fields
-    if (!payload.email || !payload.exp) {
-      console.error('❌ JWT token missing required fields (email, exp)');
-      console.error('Available fields:', Object.keys(payload));
-      return false;
-    }
-
-    console.log('✅ JWT required fields present');
-
-    // Check if token is expired
-    if (isTokenExpired(payload.exp)) {
-      console.error('❌ JWT token has expired');
-      const expDate = new Date(payload.exp * 1000);
-      console.error('Token expired at:', expDate.toISOString());
-      console.error('Current time:', new Date().toISOString());
-      return false;
-    }
-
-    console.log('✅ JWT token is not expired');
-
-    // Set user and token
-    const user = {
-      email: payload.email,
-      name: payload.name,
-      exp: payload.exp
-    };
-
-    setUser(user);
-    setToken(tokenString);
-    return true;
-  };
-
-  const login = async (tokenString) => {
-    const success = await validateAndSetToken(tokenString);
-    if (success) {
-      localStorage.setItem('coach_portal_auth_token', tokenString);
-    }
-    return success;
-  };
-
-  const logout = () => {
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem('coach_portal_auth_token');
-    console.log('User logged out - token cleared');
-  };
-
-  // Check token expiration periodically
-  useEffect(() => {
-    if (user && user.exp) {
-      const checkExpiration = () => {
-        if (isTokenExpired(user.exp)) {
-          console.warn('Token expired, logging out...');
-          logout();
+      // If email is valid, send magic link
+      const { error } = await supabase.auth.signInWithOtp({
+        email: email.toLowerCase(),
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          shouldCreateUser: false
         }
-      };
+      });
 
-      // Check every minute
-      const interval = setInterval(checkExpiration, 60000);
-      return () => clearInterval(interval);
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      // Store remember me preference
+      if (rememberMe) {
+        localStorage.setItem('rhwb_remember_me', 'true');
+        localStorage.setItem('rhwb_user_email', email.toLowerCase());
+      } else {
+        localStorage.removeItem('rhwb_remember_me');
+        localStorage.removeItem('rhwb_user_email');
+      }
+
+      setIsEmailSent(true);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: 'An unexpected error occurred' };
+    } finally {
+      setIsLoading(false);
     }
-  }, [user]);
+  };
+
+  // Sign out
+  const logout = async () => {
+    try {
+      setAuthError(null);
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error('Sign out error:', error);
+        setAuthError(error.message);
+        return { success: false, error: error.message };
+      }
+
+      console.log('Sign out successful');
+      setUser(null);
+      setSession(null);
+      
+      // Clear local storage on logout
+      localStorage.removeItem('rhwb_remember_me');
+      localStorage.removeItem('rhwb_user_email');
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Sign out error:', error);
+      setAuthError(error.message);
+      return { success: false, error: error.message };
+    }
+  };
+
+  // Clear email sent state
+  const clearEmailSent = () => {
+    setIsEmailSent(false);
+  };
+
+  // Get user's coach email (for backward compatibility)
+  const getCoachEmail = () => {
+    return user?.email || null;
+  };
 
   const value = {
     user,
-    token,
+    session,
+    isLoading,
+    authError,
     login,
     logout,
-    isAuthenticated: !!user && !!token,
-    isLoading
+    clearEmailSent,
+    getCoachEmail,
+    isAuthenticated: !!user,
+    isEmailSent,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

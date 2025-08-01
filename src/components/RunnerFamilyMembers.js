@@ -1,26 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import { Users } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 
 const RunnerFamilyMembers = ({ runner }) => {
   const [familyMembers, setFamilyMembers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error] = useState(null);
 
-  // Utility to calculate age from date string
-  const calculateAge = (dob) => {
-    if (!dob) return null;
-    const birthDate = new Date(dob);
-    if (isNaN(birthDate.getTime())) return null;
-    const today = new Date();
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const m = today.getMonth() - birthDate.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
-    }
-    return age;
-  };
 
   // Load family members data when component mounts
   useEffect(() => {

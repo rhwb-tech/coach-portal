@@ -9,13 +9,17 @@ import SmallCouncil from './SmallCouncil';
 import UserGuide from './UserGuide';
 
 const CoachDashboard = () => {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, logout } = useAuth();
   
-  // Get coach email from JWT token or URL parameter
+  // Get coach email from authenticated user or URL override
   const urlParams = new URLSearchParams(window.location.search);
-  const coachEmail = user?.email || urlParams.get('coach');
-  // Season is now only used for Runner Metrics section
+  const overrideEmail = urlParams.get('email');
+  const coachEmail = overrideEmail || user?.email;
   const season = parseInt(urlParams.get('season')) || 13;
+  
+  console.log('CoachDashboard - User:', user);
+  console.log('CoachDashboard - Override email:', overrideEmail);
+  console.log('CoachDashboard - Final coach email:', coachEmail);
 
   const [selectedDistance, setSelectedDistance] = useState('All');
   const [selectedMeso, setSelectedMeso] = useState('');
@@ -50,7 +54,14 @@ const CoachDashboard = () => {
   const [feedbackNote, setFeedbackNote] = useState('');
   
   // Navigation state
-  const [currentView, setCurrentView] = useState('know-your-runner'); // 'dashboard', 'rhwb-connect', or 'know-your-runner'
+  const [currentView, setCurrentView] = useState('know-your-runner'); // 'dashboard', 'rhwb-connect', 'know-your-runner', or 'small-council'
+  
+  // Redirect to default view if user doesn't have access to current view
+  useEffect(() => {
+    if (currentView === 'small-council' && user?.role !== 'admin' && user?.role !== 'Admin') {
+      setCurrentView('know-your-runner');
+    }
+  }, [currentView, user?.role]);
 
   // Get unique filter options from data
   // Store all data and filter options
@@ -86,11 +97,18 @@ const CoachDashboard = () => {
   // Load cohort data when switching to Know Your Runner view
   useEffect(() => {
     const loadCohortData = async () => {
-      if (currentView !== 'know-your-runner' || !coachEmail) return;
+      console.log('loadCohortData called:', { currentView, coachEmail });
+      
+      if (currentView !== 'know-your-runner' || !coachEmail) {
+        console.log('Skipping cohort data load:', { currentView, coachEmail });
+        return;
+      }
       
       try {
         setCohortLoading(true);
         setCohortError(null);
+        
+        console.log('Starting cohort data load for coach:', coachEmail);
         
         // Query 1: Get current season from rhwb_seasons table
         const { data: seasonData, error: seasonError } = await supabase
@@ -98,6 +116,8 @@ const CoachDashboard = () => {
           .select('season')
           .eq('current', true)
           .single();
+        
+        console.log('Season query result:', { seasonData, seasonError });
         
         if (seasonError || !seasonData) {
           console.error('Failed to fetch current season:', seasonError);
@@ -107,6 +127,7 @@ const CoachDashboard = () => {
         
         const currentSeasonValue = seasonData.season;
         setCurrentSeason(currentSeasonValue);
+        console.log('Current season:', currentSeasonValue);
         
         // Query 2: Get coach name from rhwb_coaches table
         const { data: coachData, error: coachError } = await supabase
@@ -115,12 +136,16 @@ const CoachDashboard = () => {
           .eq('email_id', coachEmail)
           .single();
         
+        console.log('Coach query result:', { coachData, coachError });
+        
         if (coachError || !coachData) {
+          console.error('Failed to fetch coach data:', coachError);
           setCohortData([]);
           return;
         }
         
         const coachNameValue = coachData.coach;
+        console.log('Coach name:', coachNameValue);
         
         // Query 3: Get the season info for the coach using current season
         const { data: runnerSeasonData, error: runnerSeasonError } = await supabase
@@ -129,19 +154,36 @@ const CoachDashboard = () => {
           .eq('season', currentSeasonValue)
           .eq('coach', coachNameValue);
         
+        console.log('Runner season query result:', { 
+          runnerSeasonData, 
+          runnerSeasonError, 
+          count: runnerSeasonData?.length,
+          season: currentSeasonValue,
+          coach: coachNameValue
+        });
+        
         if (runnerSeasonError || !runnerSeasonData || runnerSeasonData.length === 0) {
+          console.error('Failed to fetch runner season data:', runnerSeasonError);
           setCohortData([]);
           return;
         }
         
         // Get email IDs from season data
         const emailIds = runnerSeasonData.map(item => item.email_id);
+        console.log('Email IDs to fetch profiles for:', emailIds);
         
         // Query 4: Fetch runner profiles for these email IDs
         const { data: profileData, error: profileError } = await supabase
           .from('runners_profile')
           .select('email_id, runner_name, gender, phone_no, dob, city, state, notes_present')
           .in('email_id', emailIds);
+        
+        console.log('Profile query result:', { 
+          profileData, 
+          profileError, 
+          count: profileData?.length,
+          emailIds
+        });
         
         // Combine the data
         const cohortResult = runnerSeasonData.map(seasonItem => {
@@ -153,25 +195,26 @@ const CoachDashboard = () => {
         });
         
         if (!profileError) {
-                     // Transform the data to match the expected format
-           const transformedCohort = cohortResult?.map(runner => {
-             const age = runner.runners_profile?.dob ? new Date().getFullYear() - new Date(runner.runners_profile.dob).getFullYear() : null;
-             const gender = runner.runners_profile?.gender;
-             const genderAge = gender && age ? `${gender.substring(0, 1)}${age}` : age ? `${age}` : 'N/A';
-             
-             return {
-               runner_name: runner.runners_profile?.runner_name,
-               gender: runner.runners_profile?.gender,
-               phone_no: runner.runners_profile?.phone_no,
-               age: age,
-               gender_age: genderAge,
-                               race_distance: runner.race_distance,
-                location: [runner.runners_profile?.city, runner.runners_profile?.state].filter(Boolean).join(', '),
-                email_id: runner.email_id,
-                notes_present: runner.runners_profile?.notes_present || false
-              };
-           }) || [];
+          // Transform the data to match the expected format
+          const transformedCohort = cohortResult?.map(runner => {
+            const age = runner.runners_profile?.dob ? new Date().getFullYear() - new Date(runner.runners_profile.dob).getFullYear() : null;
+            const gender = runner.runners_profile?.gender;
+            const genderAge = gender && age ? `${gender.substring(0, 1)}${age}` : age ? `${age}` : 'N/A';
+            
+            return {
+              runner_name: runner.runners_profile?.runner_name,
+              gender: runner.runners_profile?.gender,
+              phone_no: runner.runners_profile?.phone_no,
+              age: age,
+              gender_age: genderAge,
+              race_distance: runner.race_distance,
+              location: [runner.runners_profile?.city, runner.runners_profile?.state].filter(Boolean).join(', '),
+              email_id: runner.email_id,
+              notes_present: runner.runners_profile?.notes_present || false
+            };
+          }) || [];
           
+          console.log('Final transformed cohort data:', transformedCohort);
           setCohortData(transformedCohort);
           
           // Get unique race distances from cohort data
@@ -686,33 +729,6 @@ const CoachDashboard = () => {
     return <div className="text-center py-8">Initializing...</div>;
   }
 
-  // Check if coach email is available
-  if (!coachEmail) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
-        <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-8 shadow-lg border border-gray-200 max-w-md mx-4">
-          <div className="text-center">
-            <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-4 rounded-xl mb-6">
-              <TrendingUp className="h-12 w-12 text-white mx-auto" />
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Authentication Required</h1>
-            <p className="text-gray-600 mb-6">
-              You need to authenticate to access the Coach Portal. Please log in through the official RHWB website.
-            </p>
-            <div className="bg-blue-50 rounded-lg p-4 mb-6">
-              <p className="text-sm text-blue-700">
-                Redirecting to <a href="https://www.rhwb.org/coach-portal" className="font-semibold underline">RHWB Coach Portal</a> in 3 seconds...
-              </p>
-            </div>
-            <div className="flex justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // Show loading state while data is loading (only for dashboard view)
   if (currentView === 'dashboard' && loading) {
     return <div className="text-center py-8">Loading athlete data...</div>;
@@ -758,7 +774,7 @@ const CoachDashboard = () => {
               </div>
               
               {/* Desktop Navigation Tabs */}
-              <div className="hidden lg:flex items-center space-x-1 ml-4 sm:ml-8">
+              <div className="hidden lg:flex flex-wrap items-center space-x-1 ml-4 sm:ml-8">
                 <button
                   onClick={() => setCurrentView('know-your-runner')}
                   className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors duration-200 text-sm sm:text-base ${
@@ -789,16 +805,18 @@ const CoachDashboard = () => {
                 >
                   Runner Metrics
                 </button>
-                <button
-                  onClick={() => setCurrentView('small-council')}
-                  className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors duration-200 text-sm sm:text-base ${
-                    currentView === 'small-council'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  Small Council
-                </button>
+                {(user?.role === 'admin' || user?.role === 'Admin') && (
+                  <button
+                    onClick={() => setCurrentView('small-council')}
+                    className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors duration-200 text-sm sm:text-base ${
+                      currentView === 'small-council'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                    }`}
+                  >
+                    Admin
+                  </button>
+                )}
               </div>
             </div>
             
@@ -835,6 +853,16 @@ const CoachDashboard = () => {
                       >
                         <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
                         <span>User Guide</span>
+                      </button>
+                      <div className="border-t border-gray-200 my-2"></div>
+                      <button
+                        onClick={logout}
+                        className="w-full text-left px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base transition-colors flex items-center space-x-2 sm:space-x-3 text-red-600 hover:bg-red-50"
+                      >
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                        <span>Sign Out</span>
                       </button>
                     </div>
                   )}
@@ -890,19 +918,21 @@ const CoachDashboard = () => {
                 >
                   Runner Metrics
                 </button>
-                <button
-                  onClick={() => {
-                    setCurrentView('small-council');
-                    setHamburgerMenuOpen(false);
-                  }}
-                  className={`w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-lg transition-colors duration-200 font-medium text-sm sm:text-base ${
-                    currentView === 'small-council' 
-                      ? 'bg-blue-600 text-white' 
-                      : 'text-gray-200 hover:bg-gray-700 hover:text-white'
-                  }`}
-                >
-                  Small Council
-                </button>
+                {(user?.role === 'admin' || user?.role === 'Admin') && (
+                  <button
+                    onClick={() => {
+                      setCurrentView('small-council');
+                      setHamburgerMenuOpen(false);
+                    }}
+                    className={`w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-lg transition-colors duration-200 font-medium text-sm sm:text-base ${
+                      currentView === 'small-council' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'text-gray-200 hover:bg-gray-700 hover:text-white'
+                    }`}
+                  >
+                    Admin
+                  </button>
+                )}
                 
                 {/* Separator */}
                 <div className="border-t border-gray-600 my-2"></div>

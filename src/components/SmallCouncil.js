@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Users, Clock, CheckCircle, XCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 
@@ -13,7 +13,7 @@ const SmallCouncil = ({ coachEmail }) => {
   const [showCompleted, setShowCompleted] = useState(false); // NEW: toggle for showing completed requests
 
   // Load action requests from database
-  const loadActionRequests = async () => {
+  const loadActionRequests = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -94,11 +94,11 @@ const SmallCouncil = ({ coachEmail }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showCompleted]);
 
   useEffect(() => {
     loadActionRequests();
-  }, [coachEmail, showCompleted]);
+  }, [coachEmail, showCompleted, loadActionRequests]);
 
   // Get runner details for display
   const getRunnerDetails = async (emailId) => {

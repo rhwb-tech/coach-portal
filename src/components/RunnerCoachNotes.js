@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { FileText, Save, Loader2, Plus, Trash2, AlertTriangle } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { FileText, Loader2, Trash2, AlertTriangle } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -11,7 +11,6 @@ const RunnerCoachNotes = ({ runner }) => {
   const [notes, setNotes] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [lastSaved, setLastSaved] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [noteToDelete, setNoteToDelete] = useState(null);
   const [coachName, setCoachName] = useState(null);
@@ -78,6 +77,19 @@ const RunnerCoachNotes = ({ runner }) => {
     loadNotes();
   }, [runner?.email_id, coachEmail]);
 
+  // Add a new note
+  const addNewNote = useCallback(() => {
+    const newNote = {
+      note: '',
+      note_ts: new Date().toISOString(),
+      delete_flag: false,
+      comment_by: coachEmail,
+      isNew: true,
+      isEditing: true
+    };
+    setNotes(prev => [newNote, ...prev]);
+  }, [coachEmail]);
+
   // Listen for add note event from parent component
   useEffect(() => {
     const handleAddNote = (event) => {
@@ -88,20 +100,7 @@ const RunnerCoachNotes = ({ runner }) => {
 
     window.addEventListener('addNote', handleAddNote);
     return () => window.removeEventListener('addNote', handleAddNote);
-  }, [runner?.email_id]);
-
-  // Add a new note
-  const addNewNote = () => {
-    const newNote = {
-      note: '',
-      note_ts: new Date().toISOString(),
-      delete_flag: false,
-      comment_by: coachEmail,
-      isNew: true,
-      isEditing: true
-    };
-    setNotes(prev => [newNote, ...prev]);
-  };
+  }, [runner?.email_id, addNewNote]);
 
   // Save a specific note
   const saveNote = async (noteIndex) => {
@@ -166,7 +165,7 @@ const RunnerCoachNotes = ({ runner }) => {
         ));
       }
       
-      setLastSaved(new Date());
+      // setLastSaved(new Date());
       
       // Update notes_present in runners_profile
       const { error: updateError } = await supabase
