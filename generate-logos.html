@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Logo Generator</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .logo-container { margin: 20px 0; }
+        canvas { border: 1px solid #ccc; margin: 10px; }
+        button { padding: 10px 20px; margin: 5px; background: #3B82F6; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #2563EB; }
+    </style>
+</head>
+<body>
+    <h1>RHWB Logo Generator</h1>
+    <p>Click the buttons below to generate and download logo files:</p>
+    
+    <div class="logo-container">
+        <h3>192x192 Logo</h3>
+        <canvas id="canvas192" width="192" height="192"></canvas>
+        <br>
+        <button onclick="generateLogo(192)">Generate logo192.png</button>
+    </div>
+    
+    <div class="logo-container">
+        <h3>512x512 Logo</h3>
+        <canvas id="canvas512" width="512" height="512"></canvas>
+        <br>
+        <button onclick="generateLogo(512)">Generate logo512.png</button>
+    </div>
+    
+    <div class="logo-container">
+        <h3>32x32 Favicon</h3>
+        <canvas id="canvas32" width="32" height="32"></canvas>
+        <br>
+        <button onclick="generateLogo(32)">Generate favicon.png</button>
+    </div>
+
+    <script>
+        function generateLogo(size) {
+            const canvas = document.getElementById(`canvas${size}`);
+            const ctx = canvas.getContext('2d');
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, size, size);
+            
+            // Create gradient background
+            const gradient = ctx.createLinearGradient(0, 0, size, size);
+            gradient.addColorStop(0, '#3B82F6');
+            gradient.addColorStop(1, '#8B5CF6');
+            
+            // Draw background circle
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(size/2, size/2, size/2 - 10, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            // Draw border
+            ctx.strokeStyle = '#3B82F6';
+            ctx.lineWidth = size/64;
+            ctx.stroke();
+            
+            // Draw RHWB text
+            ctx.fillStyle = 'white';
+            ctx.font = `bold ${size/7}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.fillText('RHWB', size/2, size/2 - size/10);
+            
+            // Draw Connect text
+            ctx.font = `${size/20}px Arial`;
+            ctx.fillText('Connect', size/2, size/2 + size/10);
+            
+            // Draw running figure
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = size/80;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(size/2 - size/4, size/2 + size/4);
+            ctx.quadraticCurveTo(size/2 - size/8, size/2 + size/6, size/2, size/2 + size/4);
+            ctx.quadraticCurveTo(size/2 + size/8, size/2 + size/6, size/2 + size/4, size/2 + size/4);
+            ctx.stroke();
+            
+            // Draw feet
+            ctx.beginPath();
+            ctx.arc(size/2 - size/4, size/2 + size/4, size/80, 0, 2 * Math.PI);
+            ctx.arc(size/2 + size/4, size/2 + size/4, size/80, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            // Download the image
+            const link = document.createElement('a');
+            link.download = size === 32 ? 'favicon.png' : `logo${size}.png`;
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+        
+        // Generate all logos on page load
+        window.onload = function() {
+            generateLogo(192);
+            generateLogo(512);
+            generateLogo(32);
+        };
+    </script>
+</body>
+</html> 

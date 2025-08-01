@@ -61,9 +61,9 @@ const KnowYourRunner = ({
   // Listen for notes updates to refresh the star colors
   useEffect(() => {
     const handleNotesUpdated = (event) => {
-      const { emailId, hasNotes } = event.detail;
       // Trigger a page refresh or data reload to update the star colors
       // For now, we'll just log the event - the parent component will handle the data refresh
+      console.log('Notes updated:', event.detail);
     };
 
     window.addEventListener('notesUpdated', handleNotesUpdated);
@@ -244,7 +244,7 @@ const KnowYourRunner = ({
   const handleConfirmedTransfer = async () => {
     try {
       // Check authentication
-      const { data: { session }, error: authError } = await supabase.auth.getSession();
+      await supabase.auth.getSession();
       
       const transferData = {
         action_type: 'Transfer Runner',
@@ -256,7 +256,7 @@ const KnowYourRunner = ({
       };
 
       // First, let's test if we can read from the table
-      const { data: testData, error: testError } = await supabase
+      const { error: testError } = await supabase
         .from('rhwb_action_requests')
         .select('*')
         .limit(1);
@@ -268,7 +268,7 @@ const KnowYourRunner = ({
       }
 
       // Insert into rhwb_action_requests table
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('rhwb_action_requests')
         .insert([transferData]);
 
@@ -297,7 +297,7 @@ const KnowYourRunner = ({
   const handleConfirmedDefer = async () => {
     try {
       // Check authentication
-      const { data: { session }, error: authError } = await supabase.auth.getSession();
+      await supabase.auth.getSession();
       
       const deferData = {
         action_type: 'Defer Runner',
@@ -308,7 +308,7 @@ const KnowYourRunner = ({
       };
 
       // First, let's test if we can read from the table
-      const { data: testData, error: testError } = await supabase
+      const { error: testError } = await supabase
         .from('rhwb_action_requests')
         .select('*')
         .limit(1);
@@ -320,7 +320,7 @@ const KnowYourRunner = ({
       }
 
       // Insert into rhwb_action_requests table
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('rhwb_action_requests')
         .insert([deferData]);
 

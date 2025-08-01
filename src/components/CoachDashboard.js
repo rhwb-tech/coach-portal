@@ -697,7 +697,189 @@ const CoachDashboard = () => {
   }
 
   if (currentView === 'dashboard' && filteredRunners.length === 0) {
-    return <div className="text-center py-8">No athletes found matching your criteria.</div>;
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+        {/* Header */}
+        <div className="bg-white/90 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-50">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-14 sm:h-16">
+              <div className="flex items-center space-x-2 sm:space-x-3">
+                {/* Hamburger Menu Button - Always Visible */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setHamburgerMenuOpen(!hamburgerMenuOpen);
+                  }}
+                  className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 hamburger-menu relative z-20 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                  style={{ pointerEvents: 'auto' }}
+                >
+                  {hamburgerMenuOpen ? (
+                    <X className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" />
+                  ) : (
+                    <Menu className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" />
+                  )}
+                </button>
+                
+                <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-1.5 sm:p-2 rounded-lg sm:rounded-xl">
+                  <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-lg sm:text-xl font-bold text-gray-900 truncate">RHWB Connect</h1>
+                  <p className="text-xs sm:text-sm text-gray-600 truncate">Smarter Coaching. Stronger Community</p>
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-2 sm:space-x-4">
+                {/* Coach name only */}
+                <div className="flex items-center space-x-2 text-xs sm:text-sm text-gray-600">
+                  <span className="hidden md:inline">Coach: {user?.name || coachName || 'Unknown'}</span>
+                  <span className="md:hidden">{user?.name || coachName || 'Unknown'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Permanent Sidebar Navigation */}
+        <div className={`fixed top-14 sm:top-16 left-0 bg-white border-r border-gray-200 shadow-lg transition-transform duration-300 z-50 ${
+          hamburgerMenuOpen ? 'translate-x-0' : '-translate-x-full'
+        }`} style={{ width: '240px', height: 'auto', maxHeight: 'calc(100vh - 4rem)' }}>
+          <div className="flex flex-col">
+            {/* Sidebar Header */}
+            <div className="p-4 border-b border-gray-200">
+              <div className="flex items-center space-x-2">
+                <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-1.5 rounded-lg">
+                  <TrendingUp className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-gray-900">RHWB Connect</h2>
+                  <p className="text-xs text-gray-600">Navigation</p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Navigation Items */}
+            <nav className="p-4 space-y-2">
+              <button
+                onClick={() => {
+                  setCurrentView('know-your-runner');
+                  setHamburgerMenuOpen(false);
+                }}
+                className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
+                  currentView === 'know-your-runner' 
+                    ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <Users className="h-4 w-4" />
+                <span>Know Your Runner</span>
+              </button>
+              
+              <button
+                onClick={() => {
+                  setCurrentView('rhwb-connect');
+                  setHamburgerMenuOpen(false);
+                }}
+                className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
+                  currentView === 'rhwb-connect' 
+                    ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <Search className="h-4 w-4" />
+                <span>OneRHWB</span>
+              </button>
+              
+              <button
+                onClick={() => {
+                  setCurrentView('dashboard');
+                  setHamburgerMenuOpen(false);
+                }}
+                className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
+                  currentView === 'dashboard' 
+                    ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <BarChart3 className="h-4 w-4" />
+                <span>Runner Metrics</span>
+              </button>
+              
+              {(user?.role === 'admin' || user?.role === 'Admin') && (
+                <button
+                  onClick={() => {
+                    setCurrentView('small-council');
+                    setHamburgerMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
+                    currentView === 'small-council' 
+                      ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <Shield className="h-4 w-4" />
+                  <span>Admin</span>
+                </button>
+              )}
+              
+              {/* Divider */}
+              <div className="border-t border-gray-200 my-2"></div>
+              
+              {/* Help Menu Items */}
+              <button
+                onClick={() => {
+                  handleFeedbackClick();
+                  setHamburgerMenuOpen(false);
+                }}
+                className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                <MessageSquare className="h-4 w-4" />
+                <span>Feedback</span>
+              </button>
+              <button
+                onClick={() => {
+                  handleUserGuideClick();
+                  setHamburgerMenuOpen(false);
+                }}
+                className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                <BookOpen className="h-4 w-4" />
+                <span>User Guide</span>
+              </button>
+              <button
+                onClick={() => {
+                  logout();
+                  setHamburgerMenuOpen(false);
+                }}
+                className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm text-red-600 hover:bg-red-50"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                <span>Sign Out</span>
+              </button>
+            </nav>
+          </div>
+        </div>
+        
+        {/* Overlay for mobile */}
+        {hamburgerMenuOpen && (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+            onClick={() => setHamburgerMenuOpen(false)}
+          />
+        )}
+
+        {/* Content */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
+          <div className="text-center py-12">
+            <TrendingUp className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No athletes found</h3>
+            <p className="text-gray-600">No athletes found matching your criteria.</p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

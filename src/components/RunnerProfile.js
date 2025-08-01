@@ -1,5 +1,4 @@
 import React from 'react';
-import { User } from 'lucide-react';
 import { getAvatarInitials } from '../services/coachService';
 
 const RunnerProfile = ({ runner }) => {

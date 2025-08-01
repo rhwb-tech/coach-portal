@@ -26,8 +26,16 @@ const UserGuide = ({ onClose }) => {
             <section>
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Overview</h3>
               <p className="text-gray-600 mb-4">
-                RHWB Connect is a comprehensive coaching platform designed to help coaches manage their runners, 
-                track performance metrics, and facilitate communication within the running community.
+                RHWB Connect is an all-in-one portal built to empower RHWB Coaches with streamlined tools for managing runners, 
+                monitoring performance metrics, and handling administrative tasks efficiently. The platform is designed to replace 
+                fragmented Google Sheets workflows and enhance overall productivity through a more structured and intuitive experience.
+              </p>
+              <p className="text-gray-600 mb-4">
+                The portal will continue to add more features. If you have a feature request, use the feedback option to let us know. 
+                You can also report bugs and data issues using the same feedback form.
+              </p>
+              <p className="text-gray-600 mb-4">
+                RHWB Connect consists of multiple modules. The modules and their functionality is detailed below.
               </p>
               <div className="bg-blue-50 rounded-lg p-4">
                 <p className="text-blue-800 text-sm">
@@ -46,9 +54,21 @@ const UserGuide = ({ onClose }) => {
                     <h4 className="font-medium text-gray-900">Know Your Runner</h4>
                   </div>
                   <p className="text-gray-600 text-sm">
-                    Comprehensive runner profiles with detailed information including family members, 
-                    club history, onboarding surveys, and coach notes. Transfer runners between programs 
-                    and manage your coaching cohort.
+                    You will see the list of all runners you are managing in this current season. Comprehensive runner profiles 
+                    with detailed information including family members, club history, onboarding surveys, and coach notes. 
+                    The notes you enter here are directly saved against the runner profile for future reference. The runner will not see these notes.
+                  </p>
+                  <p className="text-gray-600 text-sm mt-2">
+                    A green star will denote there is a note present for that runner. Click on it to expand the notes section.
+                  </p>
+                  <p className="text-gray-600 text-sm mt-2">
+                    You can click on three dots for any runner related action. To transfer a runner, you can select the option. 
+                    You will be presented with options to choose which program to transfer the runner to. Optionally you can also 
+                    add a comment and save it. The runner will show as Pending Transfer status. Once he/she is moved in Final Surge, 
+                    the status of the runner will change and they will no longer appear in your cohort.
+                  </p>
+                  <p className="text-gray-600 text-sm mt-2">
+                    You can also defer a runner to the following season if there are extenuating circumstances. The runner will be removed from your list.
                   </p>
                   <div className="mt-3 space-y-2 text-sm text-gray-600">
                     <div className="flex items-center space-x-2">
@@ -57,7 +77,7 @@ const UserGuide = ({ onClose }) => {
                     </div>
                     <div className="flex items-center space-x-2">
                       <ArrowRight className="h-4 w-4" />
-                      <span>Transfer runners between programs (Lite, 5K, 10K, Half Marathon, Full Marathon)</span>
+                      <span>Transfer runners between programs (5K, 10K, Half Marathon, Marathon)</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <ArrowRight className="h-4 w-4" />
@@ -72,8 +92,8 @@ const UserGuide = ({ onClose }) => {
                     <h4 className="font-medium text-gray-900">OneRHWB</h4>
                   </div>
                   <p className="text-gray-600 text-sm">
-                    Search and view runner information across all seasons. Find runners by name or email 
-                    and access their complete history and household information.
+                    This is a comprehensive database of all the runners from the last 14 seasons. Find runners by name or email 
+                    and access their complete history and household information. Based on their street address in the profile we group them as a family.
                   </p>
                   <div className="mt-3 space-y-2 text-sm text-gray-600">
                     <div className="flex items-center space-x-2">
@@ -97,8 +117,9 @@ const UserGuide = ({ onClose }) => {
                     <h4 className="font-medium text-gray-900">Runner Metrics</h4>
                   </div>
                   <p className="text-gray-600 text-sm">
-                    Track and manage athlete performance metrics including strength training, mileage, 
-                    cross-training, and qualitative assessments. Edit scores and add coach notes.
+                    Track and manage runners' meso scores and qualitative input here. At the end of every meso, 
+                    the data will be refreshed from Final Surge to provide you with runners' activity statistics. 
+                    Any information you saved here will reflect in the Pulse dashboard that the runners will be viewing.
                   </p>
                   <div className="mt-3 space-y-2 text-sm text-gray-600">
                     <div className="flex items-center space-x-2">
