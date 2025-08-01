@@ -55,7 +55,7 @@ export const fetchCoachData = async (coachEmail, season = 13, selectedDistance =
       throw new Error('Failed to fetch coach data from database');
     }
 
-    console.log(`Fetched ${data.length} athletes for coach ${coachEmail} in season ${season} with filters: distance=${selectedDistance}, meso=${selectedMeso}`);
+
     return data || [];
     
   } catch (error) {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Info, Save, TrendingUp, ChevronDown, Menu, X, HelpCircle, MessageSquare, BookOpen } from 'lucide-react';
+import { Search, Info, Save, TrendingUp, ChevronDown, Menu, X, MessageSquare, BookOpen, Users, BarChart3, Shield } from 'lucide-react';
 import { fetchCoachData, updateAthleteData, calculateCompletionRate, getAvatarInitials } from '../services/coachService';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../services/supabaseClient';
@@ -17,9 +17,7 @@ const CoachDashboard = () => {
   const coachEmail = overrideEmail || user?.email;
   const season = parseInt(urlParams.get('season')) || 13;
   
-  console.log('CoachDashboard - User:', user);
-  console.log('CoachDashboard - Override email:', overrideEmail);
-  console.log('CoachDashboard - Final coach email:', coachEmail);
+
 
   const [selectedDistance, setSelectedDistance] = useState('All');
   const [selectedMeso, setSelectedMeso] = useState('');
@@ -47,7 +45,6 @@ const CoachDashboard = () => {
   const [hamburgerMenuOpen, setHamburgerMenuOpen] = useState(false);
   
   // Help menu states
-  const [helpMenuOpen, setHelpMenuOpen] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [showUserGuide, setShowUserGuide] = useState(false);
   const [feedbackType, setFeedbackType] = useState('');
@@ -97,10 +94,7 @@ const CoachDashboard = () => {
   // Load cohort data when switching to Know Your Runner view
   useEffect(() => {
     const loadCohortData = async () => {
-      console.log('loadCohortData called:', { currentView, coachEmail });
-      
       if (currentView !== 'know-your-runner' || !coachEmail) {
-        console.log('Skipping cohort data load:', { currentView, coachEmail });
         return;
       }
       
@@ -108,16 +102,12 @@ const CoachDashboard = () => {
         setCohortLoading(true);
         setCohortError(null);
         
-        console.log('Starting cohort data load for coach:', coachEmail);
-        
         // Query 1: Get current season from rhwb_seasons table
         const { data: seasonData, error: seasonError } = await supabase
           .from('rhwb_seasons')
           .select('season')
           .eq('current', true)
           .single();
-        
-        console.log('Season query result:', { seasonData, seasonError });
         
         if (seasonError || !seasonData) {
           console.error('Failed to fetch current season:', seasonError);
@@ -127,7 +117,6 @@ const CoachDashboard = () => {
         
         const currentSeasonValue = seasonData.season;
         setCurrentSeason(currentSeasonValue);
-        console.log('Current season:', currentSeasonValue);
         
         // Query 2: Get coach name from rhwb_coaches table
         const { data: coachData, error: coachError } = await supabase
@@ -136,8 +125,6 @@ const CoachDashboard = () => {
           .eq('email_id', coachEmail)
           .single();
         
-        console.log('Coach query result:', { coachData, coachError });
-        
         if (coachError || !coachData) {
           console.error('Failed to fetch coach data:', coachError);
           setCohortData([]);
@@ -145,7 +132,6 @@ const CoachDashboard = () => {
         }
         
         const coachNameValue = coachData.coach;
-        console.log('Coach name:', coachNameValue);
         
         // Query 3: Get the season info for the coach using current season
         const { data: runnerSeasonData, error: runnerSeasonError } = await supabase
@@ -153,14 +139,6 @@ const CoachDashboard = () => {
           .select('email_id, race_distance, coach, season')
           .eq('season', currentSeasonValue)
           .eq('coach', coachNameValue);
-        
-        console.log('Runner season query result:', { 
-          runnerSeasonData, 
-          runnerSeasonError, 
-          count: runnerSeasonData?.length,
-          season: currentSeasonValue,
-          coach: coachNameValue
-        });
         
         if (runnerSeasonError || !runnerSeasonData || runnerSeasonData.length === 0) {
           console.error('Failed to fetch runner season data:', runnerSeasonError);
@@ -170,20 +148,12 @@ const CoachDashboard = () => {
         
         // Get email IDs from season data
         const emailIds = runnerSeasonData.map(item => item.email_id);
-        console.log('Email IDs to fetch profiles for:', emailIds);
         
         // Query 4: Fetch runner profiles for these email IDs
         const { data: profileData, error: profileError } = await supabase
           .from('runners_profile')
           .select('email_id, runner_name, gender, phone_no, dob, city, state, notes_present')
           .in('email_id', emailIds);
-        
-        console.log('Profile query result:', { 
-          profileData, 
-          profileError, 
-          count: profileData?.length,
-          emailIds
-        });
         
         // Combine the data
         const cohortResult = runnerSeasonData.map(seasonItem => {
@@ -214,7 +184,6 @@ const CoachDashboard = () => {
             };
           }) || [];
           
-          console.log('Final transformed cohort data:', transformedCohort);
           setCohortData(transformedCohort);
           
           // Get unique race distances from cohort data
@@ -247,9 +216,6 @@ const CoachDashboard = () => {
   // Listen for notes updates to refresh cohort data
   useEffect(() => {
     const handleNotesUpdated = (event) => {
-      const { emailId, hasNotes } = event.detail;
-      console.log('Notes updated for:', emailId, 'Has notes:', hasNotes);
-      
       // Refresh cohort data to update star colors
       if (currentView === 'know-your-runner') {
         // Trigger a reload of cohort data
@@ -572,9 +538,6 @@ const CoachDashboard = () => {
       if (!event.target.closest('.hamburger-menu')) {
         setHamburgerMenuOpen(false);
       }
-      if (!event.target.closest('.help-menu')) {
-        setHelpMenuOpen(false);
-      }
     };
 
     // Use click instead of mousedown to avoid race condition with button clicks
@@ -612,18 +575,13 @@ const CoachDashboard = () => {
   };
 
   // Help menu handlers
-  const handleHelpMenuToggle = (event) => {
-    event.stopPropagation();
-    setHelpMenuOpen(!helpMenuOpen);
-  };
+
 
   const handleFeedbackClick = () => {
-    setHelpMenuOpen(false);
     setShowFeedbackModal(true);
   };
 
   const handleUserGuideClick = () => {
-    setHelpMenuOpen(false);
     setShowUserGuide(true);
   };
 
@@ -749,13 +707,13 @@ const CoachDashboard = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14 sm:h-16">
             <div className="flex items-center space-x-2 sm:space-x-3">
-              {/* Hamburger Menu Button */}
+              {/* Hamburger Menu Button - Always Visible */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   setHamburgerMenuOpen(!hamburgerMenuOpen);
                 }}
-                className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 lg:hidden hamburger-menu relative z-20 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 hamburger-menu relative z-20 min-w-[44px] min-h-[44px] flex items-center justify-center"
                 style={{ pointerEvents: 'auto' }}
               >
                 {hamburgerMenuOpen ? (
@@ -772,196 +730,147 @@ const CoachDashboard = () => {
                 <h1 className="text-lg sm:text-xl font-bold text-gray-900 truncate">RHWB Connect</h1>
                 <p className="text-xs sm:text-sm text-gray-600 truncate">Smarter Coaching. Stronger Community</p>
               </div>
-              
-              {/* Desktop Navigation Tabs */}
-              <div className="hidden lg:flex flex-wrap items-center space-x-1 ml-4 sm:ml-8">
-                <button
-                  onClick={() => setCurrentView('know-your-runner')}
-                  className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors duration-200 text-sm sm:text-base ${
-                    currentView === 'know-your-runner'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  Know Your Runner
-                </button>
-                <button
-                  onClick={() => setCurrentView('rhwb-connect')}
-                  className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors duration-200 text-sm sm:text-base ${
-                    currentView === 'rhwb-connect'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  OneRHWB
-                </button>
-                <button
-                  onClick={() => setCurrentView('dashboard')}
-                  className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors duration-200 text-sm sm:text-base ${
-                    currentView === 'dashboard'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  Runner Metrics
-                </button>
-                {(user?.role === 'admin' || user?.role === 'Admin') && (
-                  <button
-                    onClick={() => setCurrentView('small-council')}
-                    className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors duration-200 text-sm sm:text-base ${
-                      currentView === 'small-council'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                    }`}
-                  >
-                    Admin
-                  </button>
-                )}
-              </div>
             </div>
             
             <div className="flex items-center space-x-2 sm:space-x-4">
-              {/* Mobile: Coach name only (no help icon) */}
-              <div className="flex sm:hidden items-center space-x-2 text-xs text-gray-600">
-                <span className="truncate max-w-20">{user?.name || coachName || 'Unknown'}</span>
-              </div>
-              
-              {/* Desktop: Coach name and help icon */}
-              <div className="hidden sm:flex items-center space-x-2 text-xs sm:text-sm text-gray-600">
+              {/* Coach name only */}
+              <div className="flex items-center space-x-2 text-xs sm:text-sm text-gray-600">
                 <span className="hidden md:inline">Coach: {user?.name || coachName || 'Unknown'}</span>
                 <span className="md:hidden">{user?.name || coachName || 'Unknown'}</span>
-                <div className="relative help-menu">
-                  <button
-                    onClick={handleHelpMenuToggle}
-                    className="p-1 rounded-lg hover:bg-gray-100 transition-colors duration-200"
-                  >
-                    <HelpCircle className="h-5 w-5 sm:h-6 sm:w-6 text-gray-500" />
-                  </button>
-                  
-                  {helpMenuOpen && (
-                    <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-3 z-30 min-w-[180px] sm:min-w-[200px]">
-                      <button
-                        onClick={handleFeedbackClick}
-                        className="w-full text-left px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base transition-colors flex items-center space-x-2 sm:space-x-3 text-gray-700 hover:bg-gray-50"
-                      >
-                        <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
-                        <span>Feedback</span>
-                      </button>
-                      <button
-                        onClick={handleUserGuideClick}
-                        className="w-full text-left px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base transition-colors flex items-center space-x-2 sm:space-x-3 text-gray-700 hover:bg-gray-50"
-                      >
-                        <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
-                        <span>User Guide</span>
-                      </button>
-                      <div className="border-t border-gray-200 my-2"></div>
-                      <button
-                        onClick={logout}
-                        className="w-full text-left px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base transition-colors flex items-center space-x-2 sm:space-x-3 text-red-600 hover:bg-red-50"
-                      >
-                        <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                        </svg>
-                        <span>Sign Out</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Hamburger Menu Dropdown */}
-      {hamburgerMenuOpen && (
-        <div className="lg:hidden absolute top-14 sm:top-16 left-0 right-0 z-40 hamburger-menu">
-          <div className="bg-gray-800 border border-gray-600 shadow-2xl mx-4 mt-2 rounded-xl">
-            <div className="px-4 sm:px-6 py-3 sm:py-4">
-              <div className="space-y-1 sm:space-y-2">
-                <button
-                  onClick={() => {
-                    setCurrentView('know-your-runner');
-                    setHamburgerMenuOpen(false);
-                  }}
-                  className={`w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-lg transition-colors duration-200 font-medium text-sm sm:text-base ${
-                    currentView === 'know-your-runner' 
-                      ? 'bg-blue-600 text-white' 
-                      : 'text-gray-200 hover:bg-gray-700 hover:text-white'
-                  }`}
-                >
-                  Know Your Runner
-                </button>
-                <button
-                  onClick={() => {
-                    setCurrentView('rhwb-connect');
-                    setHamburgerMenuOpen(false);
-                  }}
-                  className={`w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-lg transition-colors duration-200 font-medium text-sm sm:text-base ${
-                    currentView === 'rhwb-connect' 
-                      ? 'bg-blue-600 text-white' 
-                      : 'text-gray-200 hover:bg-gray-700 hover:text-white'
-                  }`}
-                >
-                  OneRHWB
-                </button>
-                <button
-                  onClick={() => {
-                    setCurrentView('dashboard');
-                    setHamburgerMenuOpen(false);
-                  }}
-                  className={`w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-lg transition-colors duration-200 font-medium text-sm sm:text-base ${
-                    currentView === 'dashboard' 
-                      ? 'bg-blue-600 text-white' 
-                      : 'text-gray-200 hover:bg-gray-700 hover:text-white'
-                  }`}
-                >
-                  Runner Metrics
-                </button>
-                {(user?.role === 'admin' || user?.role === 'Admin') && (
-                  <button
-                    onClick={() => {
-                      setCurrentView('small-council');
-                      setHamburgerMenuOpen(false);
-                    }}
-                    className={`w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-lg transition-colors duration-200 font-medium text-sm sm:text-base ${
-                      currentView === 'small-council' 
-                        ? 'bg-blue-600 text-white' 
-                        : 'text-gray-200 hover:bg-gray-700 hover:text-white'
-                    }`}
-                  >
-                    Admin
-                  </button>
-                )}
-                
-                {/* Separator */}
-                <div className="border-t border-gray-600 my-2"></div>
-                
-                {/* Help Options */}
-                <button
-                  onClick={() => {
-                    handleFeedbackClick();
-                    setHamburgerMenuOpen(false);
-                  }}
-                  className="w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-lg transition-colors duration-200 font-medium text-sm sm:text-base text-gray-200 hover:bg-gray-700 hover:text-white flex items-center space-x-2"
-                >
-                  <MessageSquare className="w-4 h-4" />
-                  <span>Feedback</span>
-                </button>
-                <button
-                  onClick={() => {
-                    handleUserGuideClick();
-                    setHamburgerMenuOpen(false);
-                  }}
-                  className="w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-lg transition-colors duration-200 font-medium text-sm sm:text-base text-gray-200 hover:bg-gray-700 hover:text-white flex items-center space-x-2"
-                >
-                  <BookOpen className="w-4 h-4" />
-                  <span>User Guide</span>
-                </button>
+      {/* Permanent Sidebar Navigation */}
+      <div className={`fixed top-14 sm:top-16 left-0 bg-white border-r border-gray-200 shadow-lg transition-transform duration-300 z-50 ${
+        hamburgerMenuOpen ? 'translate-x-0' : '-translate-x-full'
+      }`} style={{ width: '240px', height: 'auto', maxHeight: 'calc(100vh - 4rem)' }}>
+        <div className="flex flex-col">
+          {/* Sidebar Header */}
+          <div className="p-4 border-b border-gray-200">
+            <div className="flex items-center space-x-2">
+              <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-1.5 rounded-lg">
+                <TrendingUp className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-gray-900">RHWB Connect</h2>
+                <p className="text-xs text-gray-600">Navigation</p>
               </div>
             </div>
           </div>
+          
+          {/* Navigation Items */}
+          <nav className="p-4 space-y-2">
+            <button
+              onClick={() => {
+                setCurrentView('know-your-runner');
+                setHamburgerMenuOpen(false);
+              }}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
+                currentView === 'know-your-runner' 
+                  ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                  : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <Users className="h-4 w-4" />
+              <span>Know Your Runner</span>
+            </button>
+            
+            <button
+              onClick={() => {
+                setCurrentView('rhwb-connect');
+                setHamburgerMenuOpen(false);
+              }}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
+                currentView === 'rhwb-connect' 
+                  ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                  : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <TrendingUp className="h-4 w-4" />
+              <span>OneRHWB</span>
+            </button>
+            
+            <button
+              onClick={() => {
+                setCurrentView('dashboard');
+                setHamburgerMenuOpen(false);
+              }}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
+                currentView === 'dashboard' 
+                  ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                  : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <BarChart3 className="h-4 w-4" />
+              <span>Runner Metrics</span>
+            </button>
+            
+            {(user?.role === 'admin' || user?.role === 'Admin') && (
+              <button
+                onClick={() => {
+                  setCurrentView('small-council');
+                  setHamburgerMenuOpen(false);
+                }}
+                className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
+                  currentView === 'small-council' 
+                    ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <Shield className="h-4 w-4" />
+                <span>Admin</span>
+              </button>
+            )}
+            
+            {/* Divider */}
+            <div className="border-t border-gray-200 my-2"></div>
+            
+            {/* Help Menu Items */}
+            <button
+              onClick={() => {
+                handleFeedbackClick();
+                setHamburgerMenuOpen(false);
+              }}
+              className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              <MessageSquare className="h-4 w-4" />
+              <span>Feedback</span>
+            </button>
+            <button
+              onClick={() => {
+                handleUserGuideClick();
+                setHamburgerMenuOpen(false);
+              }}
+              className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              <BookOpen className="h-4 w-4" />
+              <span>User Guide</span>
+            </button>
+            <button
+              onClick={() => {
+                logout();
+                setHamburgerMenuOpen(false);
+              }}
+              className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm text-red-600 hover:bg-red-50"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              <span>Sign Out</span>
+            </button>
+          </nav>
         </div>
+      </div>
+      
+      {/* Overlay for mobile */}
+      {hamburgerMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          onClick={() => setHamburgerMenuOpen(false)}
+        />
       )}
 
       {currentView === 'dashboard' ? (

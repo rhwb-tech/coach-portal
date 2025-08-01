@@ -5,6 +5,8 @@ import AuthMagicLink from './AuthMagicLink';
 const AuthWrapper = ({ children }) => {
   const { user, isLoading } = useAuth();
 
+  
+
   // Show loading state while auth is initializing
   if (isLoading) {
     return (

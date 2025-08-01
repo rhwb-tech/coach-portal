@@ -64,7 +64,6 @@ const KnowYourRunner = ({
       const { emailId, hasNotes } = event.detail;
       // Trigger a page refresh or data reload to update the star colors
       // For now, we'll just log the event - the parent component will handle the data refresh
-      console.log('Notes updated for:', emailId, 'Has notes:', hasNotes);
     };
 
     window.addEventListener('notesUpdated', handleNotesUpdated);
@@ -195,7 +194,6 @@ const KnowYourRunner = ({
       }
       setNotesSaved(true);
       setTimeout(() => setNotesSaved(false), 2000);
-      console.log('Notes saved successfully');
       // Update notes_present in runners_profile
       if (notesRunner && notesRunner.email_id) {
         const { error: updateError } = await supabase
@@ -204,8 +202,6 @@ const KnowYourRunner = ({
           .eq('email_id', notesRunner.email_id);
         if (updateError) {
           console.error('Failed to update notes_present in runners_profile:', updateError);
-        } else {
-          console.log('notes_present updated in runners_profile');
         }
       }
     } catch (error) {
@@ -247,16 +243,8 @@ const KnowYourRunner = ({
   // Handle confirmed program transfer
   const handleConfirmedTransfer = async () => {
     try {
-      console.log('Starting transfer request...');
-      console.log('Coach email:', coachEmail);
-      console.log('Transfer runner:', transferRunner);
-      console.log('Selected program:', selectedProgram);
-      console.log('Transfer comment:', transferComment);
-      
       // Check authentication
       const { data: { session }, error: authError } = await supabase.auth.getSession();
-      console.log('Auth session:', session);
-      console.log('Auth error:', authError);
       
       const transferData = {
         action_type: 'Transfer Runner',
@@ -266,12 +254,8 @@ const KnowYourRunner = ({
         current_program: transferRunner.race_distance,
         new_program: selectedProgram
       };
-      
-      console.log('Transfer data:', transferData);
-      console.log('Note: current_program and new_program will be stored in action_type or separate table');
 
       // First, let's test if we can read from the table
-      console.log('Testing table connection...');
       const { data: testData, error: testError } = await supabase
         .from('rhwb_action_requests')
         .select('*')
@@ -282,8 +266,6 @@ const KnowYourRunner = ({
         alert('Cannot connect to table. Check Supabase configuration.');
         return;
       }
-      
-      console.log('Table connection successful. Current data:', testData);
 
       // Insert into rhwb_action_requests table
       const { data, error } = await supabase
@@ -295,8 +277,6 @@ const KnowYourRunner = ({
         console.error('Error details:', error.message, error.details, error.hint);
         throw error;
       }
-
-      console.log('Transfer request submitted successfully:', data);
       
       // Mark this runner as having a pending transfer
       setPendingTransfers(prev => new Set([...prev, transferRunner.email_id]));
@@ -316,15 +296,8 @@ const KnowYourRunner = ({
   // Handle confirmed defer request
   const handleConfirmedDefer = async () => {
     try {
-      console.log('Starting defer request...');
-      console.log('Coach email:', coachEmail);
-      console.log('Defer runner:', deferRunner);
-      console.log('Defer comment:', deferComment);
-      
       // Check authentication
       const { data: { session }, error: authError } = await supabase.auth.getSession();
-      console.log('Auth session:', session);
-      console.log('Auth error:', authError);
       
       const deferData = {
         action_type: 'Defer Runner',
@@ -333,11 +306,8 @@ const KnowYourRunner = ({
         comments: deferComment.trim() || null,
         status: 'pending'
       };
-      
-      console.log('Defer data:', deferData);
 
       // First, let's test if we can read from the table
-      console.log('Testing table connection...');
       const { data: testData, error: testError } = await supabase
         .from('rhwb_action_requests')
         .select('*')
@@ -348,8 +318,6 @@ const KnowYourRunner = ({
         alert('Cannot connect to table. Check Supabase configuration.');
         return;
       }
-      
-      console.log('Table connection successful. Current data:', testData);
 
       // Insert into rhwb_action_requests table
       const { data, error } = await supabase
@@ -362,7 +330,7 @@ const KnowYourRunner = ({
         throw error;
       }
 
-      console.log('Defer request submitted successfully:', data);
+
       
       // Mark this runner as having a pending defer
       setPendingDefers(prev => new Set([...prev, deferRunner.email_id]));

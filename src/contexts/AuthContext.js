@@ -65,9 +65,10 @@ const validateEmailAccess = async (email) => {
       .from('v_rhwb_roles')
       .select('email_id, role, full_name')
       .eq('email_id', email.toLowerCase())
-      .single();
+      .maybeSingle();
 
     const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
+
 
     if (error) {
       // Check for specific error types
@@ -182,6 +183,7 @@ export const AuthProvider = ({ children }) => {
             if (overrideEmail) {
               // Validate the override email
               const validation = await validateEmailAccess(overrideEmail);
+              
               if (validation.isValid && validation.role) {
                 // Create a mock user for the override email
                 const authUser = {
@@ -192,6 +194,8 @@ export const AuthProvider = ({ children }) => {
                 };
                 setUser(authUser);
                 setSession({}); // Mock session
+              } else {
+                setAuthError(validation.error);
               }
             }
           }
@@ -209,20 +213,15 @@ export const AuthProvider = ({ children }) => {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.email);
         setSession(session);
         
         // Check for URL parameter override first
         const urlParams = new URLSearchParams(window.location.search);
         const overrideEmail = urlParams.get('email');
         
-        console.log('URL override check:', { overrideEmail, hasSession: !!session?.user });
-        
         if (overrideEmail) {
-          console.log('Processing override email:', overrideEmail);
           // Validate the override email
           const validation = await validateEmailAccess(overrideEmail);
-          console.log('Override validation result:', validation);
           
           if (validation.isValid && validation.role) {
             // Create a mock user for the override email
@@ -232,13 +231,14 @@ export const AuthProvider = ({ children }) => {
               name: validation.fullName || overrideEmail,
               id: 'override-user'
             };
-            console.log('Setting override user:', authUser);
             setUser(authUser);
             setIsLoading(false);
             setAuthError(null);
             return; // Exit early, don't process session
           } else {
-            console.log('Override validation failed:', validation.error);
+            setAuthError(validation.error);
+            setIsLoading(false);
+            return; // Exit early, don't process session
           }
         }
         
