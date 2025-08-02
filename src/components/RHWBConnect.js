@@ -38,12 +38,26 @@ const HighlightMatch = ({ text, query }) => {
 // Detail item component
 const DetailItem = ({ icon: Icon, label, value }) => {
   if (!value) return null;
+  
+  // Check if this is a phone number and make it clickable
+  const isPhoneNumber = label === 'Phone';
+  
   return (
     <div className="flex items-center text-sm">
       <Icon className="h-4 w-4 text-gray-500 mr-2 flex-shrink-0" />
       <div>
         <p className="font-medium text-gray-600">{label}</p>
-        <p className="text-gray-900">{value}</p>
+        {isPhoneNumber ? (
+          <a 
+            href={`tel:${value}`}
+            className="text-gray-900 hover:text-blue-600 hover:underline transition-colors"
+            title="Click to call"
+          >
+            {value}
+          </a>
+        ) : (
+          <p className="text-gray-900">{value}</p>
+        )}
       </div>
     </div>
   );
