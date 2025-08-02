@@ -289,11 +289,21 @@ export const AuthProvider = ({ children }) => {
         email: email.toLowerCase(),
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
-          shouldCreateUser: false
+          shouldCreateUser: true
         }
       });
 
       if (error) {
+        // Log the full error for debugging
+        console.error('Supabase OTP error:', error);
+        
+        // Handle specific Supabase configuration errors
+        if (error.message.includes('signups not allowed')) {
+          return { 
+            success: false, 
+            error: 'Email signup is disabled in Supabase. Please contact your administrator to enable email signup for magic link authentication.' 
+          };
+        }
         return { success: false, error: error.message };
       }
 
