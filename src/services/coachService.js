@@ -1,8 +1,32 @@
 import { supabase } from './supabaseClient';
 
-// Database service with Supabase
-export const fetchCoachData = async (coachEmail, season = 13, selectedDistance = 'All', selectedMeso = '') => {
+// Helper function to get current season from database
+const getCurrentSeason = async () => {
   try {
+    const { data, error } = await supabase
+      .from('rhwb_seasons')
+      .select('id')
+      .eq('current', true)
+      .single();
+
+    if (error) {
+      console.error('Error fetching current season:', error);
+      return 13; // fallback to season 13 since that's what exists in the data
+    }
+
+    return data?.id || 13;
+  } catch (error) {
+    console.error('Error in getCurrentSeason:', error);
+    return 13; // fallback to season 13 since that's what exists in the data
+  }
+};
+
+// Database service with Supabase
+export const fetchCoachData = async (coachEmail, season = null, selectedDistance = 'All', selectedMeso = '') => {
+  try {
+    // Get current season if none provided
+    const currentSeason = season || await getCurrentSeason();
+    
     // Start building the query
     let query = supabase
       .from('rhwb_coach_input')
@@ -36,7 +60,7 @@ export const fetchCoachData = async (coachEmail, season = 13, selectedDistance =
         completed_lr_distance
       `)
       .eq('coach_email', coachEmail)
-      .eq('season', `Season ${season}`);
+      .eq('season', `Season ${currentSeason}`);
 
     // Apply distance filter if not 'All'
     if (selectedDistance && selectedDistance !== 'All') {
@@ -54,7 +78,6 @@ export const fetchCoachData = async (coachEmail, season = 13, selectedDistance =
       console.error('Supabase query error:', error);
       throw new Error('Failed to fetch coach data from database');
     }
-
 
     return data || [];
     

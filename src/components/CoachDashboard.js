@@ -15,7 +15,7 @@ const CoachDashboard = () => {
   const urlParams = new URLSearchParams(window.location.search);
   const overrideEmail = urlParams.get('email');
   const coachEmail = overrideEmail || user?.email;
-  const season = parseInt(urlParams.get('season')) || 13;
+  const [season, setSeason] = useState(13); // Default to 13, will be updated from database
   
 
 
@@ -50,6 +50,9 @@ const CoachDashboard = () => {
   const [feedbackType, setFeedbackType] = useState('');
   const [feedbackNote, setFeedbackNote] = useState('');
   
+  // Validation warning states
+  const [validationWarnings, setValidationWarnings] = useState({});
+  
   // Navigation state
   const [currentView, setCurrentView] = useState('know-your-runner'); // 'dashboard', 'rhwb-connect', 'know-your-runner', or 'small-council'
   
@@ -67,6 +70,31 @@ const CoachDashboard = () => {
     distances: [],
     mesocycles: []
   });
+
+  // Load current season from database
+  useEffect(() => {
+    const loadCurrentSeason = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('rhwb_seasons')
+          .select('id')
+          .eq('current', true)
+          .single();
+
+
+
+        if (!error && data) {
+          console.log('Current season state (before update):', season);
+          console.log('Database returned:', data.id);
+          setSeason(data.id);
+        }
+      } catch (error) {
+        console.error('Failed to fetch current season:', error);
+      }
+    };
+
+    loadCurrentSeason();
+  }, []);
 
   // Load coach name on initial load (always needed for header display)
   useEffect(() => {
@@ -485,8 +513,18 @@ const CoachDashboard = () => {
 
   const handleSave = async (runnerId) => {
     try {
-      setEditingCards(prev => ({ ...prev, [runnerId]: false }));
       const updatedData = cardData[runnerId];
+      
+      // Validate override score before saving
+      if (updatedData?.overrideScore) {
+        const validation = validateOverrideScore(updatedData.overrideScore);
+        if (!validation.isValid) {
+          alert(validation.message);
+          return;
+        }
+      }
+      
+      setEditingCards(prev => ({ ...prev, [runnerId]: false }));
       
       // Save to database
       await updateAthleteData(runnerId, updatedData, selectedMeso);
@@ -516,9 +554,64 @@ const CoachDashboard = () => {
       const { [runnerId]: removed, ...rest } = prev;
       return rest;
     });
+    // Clear validation warnings for this runner
+    setValidationWarnings(prev => {
+      const { [runnerId]: removed, ...rest } = prev;
+      return rest;
+    });
+  };
+
+  // Validation function for override score
+  const validateOverrideScore = (value) => {
+    if (value === '' || value === null || value === undefined) {
+      return { isValid: true, message: '' }; // Allow empty values
+    }
+    
+    const numValue = parseFloat(value);
+    
+    // Check if it's a valid number
+    if (isNaN(numValue)) {
+      return { isValid: false, message: 'Please enter a valid number.' };
+    }
+    
+    // Check if it's between 1 and 5
+    if (numValue < 1 || numValue > 5) {
+      return { isValid: false, message: 'Score must be between 1 and 5.' };
+    }
+    
+    // Check if it has at most one decimal place
+    const decimalPlaces = value.toString().split('.')[1]?.length || 0;
+    if (decimalPlaces > 1) {
+      return { isValid: false, message: 'Score can have at most one decimal place.' };
+    }
+    
+    return { isValid: true, message: '' };
   };
 
   const updateCardData = (runnerId, field, value) => {
+    // Apply validation for override score
+    if (field === 'overrideScore') {
+      const validation = validateOverrideScore(value);
+      
+      // Update validation warnings
+      setValidationWarnings(prev => ({
+        ...prev,
+        [runnerId]: validation.isValid ? '' : validation.message
+      }));
+      
+      // Only update the value if it's valid or empty
+      if (validation.isValid || value === '') {
+        setCardData(prev => ({
+          ...prev,
+          [runnerId]: {
+            ...prev[runnerId],
+            [field]: value
+          }
+        }));
+      }
+      return;
+    }
+    
     setCardData(prev => ({
       ...prev,
       [runnerId]: {
@@ -732,8 +825,8 @@ const CoachDashboard = () => {
               <div className="flex items-center space-x-2 sm:space-x-4">
                 {/* Coach name only */}
                 <div className="flex items-center space-x-2 text-xs sm:text-sm text-gray-600">
-                  <span className="hidden md:inline">Coach: {user?.name || coachName || 'Unknown'}</span>
-                  <span className="md:hidden">{user?.name || coachName || 'Unknown'}</span>
+                                  <span className="hidden md:inline">Coach: {coachName || user?.name || 'Unknown'}</span>
+                <span className="md:hidden">{coachName || user?.name || 'Unknown'}</span>
                 </div>
               </div>
             </div>
@@ -917,8 +1010,8 @@ const CoachDashboard = () => {
             <div className="flex items-center space-x-2 sm:space-x-4">
               {/* Coach name only */}
               <div className="flex items-center space-x-2 text-xs sm:text-sm text-gray-600">
-                <span className="hidden md:inline">Coach: {user?.name || coachName || 'Unknown'}</span>
-                <span className="md:hidden">{user?.name || coachName || 'Unknown'}</span>
+                <span className="hidden md:inline">Coach: {coachName || user?.name || 'Unknown'}</span>
+                <span className="md:hidden">{coachName || user?.name || 'Unknown'}</span>
               </div>
             </div>
           </div>
@@ -1229,19 +1322,26 @@ const CoachDashboard = () => {
                 {/* Override Score */}
                 <div className="mb-3 sm:mb-4">
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
-                    Override Score (0-5)
+                    Override Score (1-5)
                   </label>
                   <input
                     type="number"
                     step="0.1"
-                    min="0"
+                    min="1"
                     max="5"
                     value={editingCards[runner.id] ? (cardData[runner.id]?.overrideScore || '') : (runner.overrideScore || '')}
                     onChange={(e) => updateCardData(runner.id, 'overrideScore', e.target.value)}
                     disabled={!editingCards[runner.id]}
-                    className="w-full px-3 sm:px-4 py-2 border border-gray-300 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500 text-sm sm:text-base"
+                    className={`w-full px-3 sm:px-4 py-2 border rounded-lg sm:rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500 text-sm sm:text-base ${
+                      validationWarnings[runner.id] ? 'border-red-300 focus:ring-red-500' : 'border-gray-300'
+                    }`}
                     placeholder="Optional override score"
                   />
+                  {validationWarnings[runner.id] && (
+                    <div className="mt-1 text-xs text-red-600 font-medium">
+                      {validationWarnings[runner.id]}
+                    </div>
+                  )}
                 </div>
 
                 {/* Qualitative Score */}

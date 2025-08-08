@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, Search, Users, Edit, Users as FamilyIcon, Clock, FileText, TrendingUp, Plus, MessageCircle } from 'lucide-react';
+import { ChevronDown, Search, Users, Edit, Users as FamilyIcon, Clock, FileText, TrendingUp, Plus, MessageCircle, Mail } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 import RunnerCoachNotes from './RunnerCoachNotes';
 import RunnerFamilyMembers from './RunnerFamilyMembers';
@@ -503,6 +503,20 @@ const KnowYourRunner = ({
                         </div>
                         
                         <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-1">
+                          {/* Email - Desktop only */}
+                          {runner.email_id && (
+                            <div className="hidden sm:flex items-center text-xs sm:text-sm text-gray-500">
+                              <Mail className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                              <a 
+                                href={`mailto:${runner.email_id}`}
+                                className="hover:text-blue-600 hover:underline transition-colors"
+                                title="Send email"
+                              >
+                                {runner.email_id}
+                              </a>
+                            </div>
+                          )}
+                          
                           {/* Race Distance Chip */}
                           <span className={`inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs font-medium ${
                             runner.race_distance === '5K' ? 'bg-green-100 text-green-700' :
@@ -705,6 +719,20 @@ const KnowYourRunner = ({
                                     title="Open WhatsApp"
                                   >
                                     <MessageCircle className="h-4 w-4" />
+                                  </a>
+                                </div>
+                              )}
+                              
+                              {/* Email */}
+                              {runner.email_id && (
+                                <div className="flex items-center text-sm text-gray-600">
+                                  <Mail className="h-4 w-4 mr-2 text-gray-400" />
+                                  <a 
+                                    href={`mailto:${runner.email_id}`}
+                                    className="hover:text-blue-600 hover:underline transition-colors"
+                                    title="Send email"
+                                  >
+                                    {runner.email_id}
                                   </a>
                                 </div>
                               )}

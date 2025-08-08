@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, X, User, Mail, Calendar, MapPin, Award, Loader, Phone, Map, Users, Gift, ChevronsRight, ChevronDown, ChevronRight } from 'lucide-react';
+import { Search, X, User, Mail, Calendar, MapPin, Award, Loader, Phone, Map, Users, Gift, ChevronsRight, ChevronDown, ChevronRight, MessageCircle } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 
 // Utility to calculate age from date string
@@ -45,16 +45,27 @@ const DetailItem = ({ icon: Icon, label, value }) => {
   return (
     <div className="flex items-center text-sm">
       <Icon className="h-4 w-4 text-gray-500 mr-2 flex-shrink-0" />
-      <div>
+      <div className="flex-1">
         <p className="font-medium text-gray-600">{label}</p>
         {isPhoneNumber ? (
-          <a 
-            href={`tel:${value}`}
-            className="text-gray-900 hover:text-blue-600 hover:underline transition-colors"
-            title="Click to call"
-          >
-            {value}
-          </a>
+          <div className="flex items-center space-x-2">
+            <a 
+              href={`tel:${value}`}
+              className="text-gray-900 hover:text-blue-600 hover:underline transition-colors"
+              title="Click to call"
+            >
+              {value}
+            </a>
+            <a 
+              href={`https://wa.me/${value.replace(/\D/g, '')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-green-600 hover:text-green-700 transition-colors"
+              title="Open WhatsApp"
+            >
+              <MessageCircle className="h-4 w-4" />
+            </a>
+          </div>
         ) : (
           <p className="text-gray-900">{value}</p>
         )}
@@ -278,7 +289,13 @@ const RunnerDetails = ({ runner, seasonHistory, isLoading, onRunnerSelect }) => 
               <h1 className="text-xl sm:text-2xl font-bold">{runner.runner_name}</h1>
               <p className="text-blue-100 flex items-center mt-1 text-sm break-all">
                 <Mail className="h-4 w-4 mr-2 flex-shrink-0" />
-                {runner.email_id}
+                <a 
+                  href={`mailto:${runner.email_id}`}
+                  className="hover:text-white hover:underline transition-colors"
+                  title="Send email"
+                >
+                  {runner.email_id}
+                </a>
               </p>
             </div>
           </div>
