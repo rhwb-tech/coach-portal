@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, X, User, Mail, Calendar, MapPin, Award, Loader, Phone, Map, Users, Gift, ChevronsRight, ChevronDown, ChevronRight, MessageCircle } from 'lucide-react';
+import { Search, X, User, Mail, Calendar, MapPin, Award, Loader, Phone, Map, Users, Gift, ChevronsRight, ChevronDown, ChevronRight, MessageCircle, Copy, Check } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 
 // Utility to calculate age from date string
@@ -36,11 +36,12 @@ const HighlightMatch = ({ text, query }) => {
 };
 
 // Detail item component
-const DetailItem = ({ icon: Icon, label, value }) => {
+const DetailItem = ({ icon: Icon, label, value, onCopy, copiedItems, runnerId }) => {
   if (!value) return null;
   
-  // Check if this is a phone number and make it clickable
+  // Check if this is a phone number or email and make it copyable
   const isPhoneNumber = label === 'Phone';
+  const isEmail = label === 'Email';
   
   return (
     <div className="flex items-center text-sm">
@@ -65,6 +66,38 @@ const DetailItem = ({ icon: Icon, label, value }) => {
             >
               <MessageCircle className="h-4 w-4" />
             </a>
+            <button
+              onClick={() => onCopy(value, 'phone', runnerId)}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+              title="Copy phone number"
+            >
+              {copiedItems[`${runnerId}-phone`] ? (
+                <Check className="h-4 w-4" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        ) : isEmail ? (
+          <div className="flex items-center space-x-2">
+            <a 
+              href={`mailto:${value}`}
+              className="text-gray-900 hover:text-blue-600 hover:underline transition-colors"
+              title="Send email"
+            >
+              {value}
+            </a>
+            <button
+              onClick={() => onCopy(value, 'email', runnerId)}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+              title="Copy email address"
+            >
+              {copiedItems[`${runnerId}-email`] ? (
+                <Check className="h-4 w-4" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+            </button>
           </div>
         ) : (
           <p className="text-gray-900">{value}</p>
@@ -205,6 +238,23 @@ const RunnerDetails = ({ runner, seasonHistory, isLoading, onRunnerSelect }) => 
   const [household, setHousehold] = useState([]);
   const [isLoadingHousehold, setIsLoadingHousehold] = useState(false);
   const [showSeasonHistory, setShowSeasonHistory] = useState(false);
+  const [copiedItems, setCopiedItems] = useState({});
+
+  // Copy to clipboard function
+  const copyToClipboard = async (text, type, runnerId) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      const key = `${runnerId}-${type}`;
+      setCopiedItems(prev => ({ ...prev, [key]: true }));
+      
+      // Reset the copied state after 2 seconds
+      setTimeout(() => {
+        setCopiedItems(prev => ({ ...prev, [key]: false }));
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
+    }
+  };
 
   useEffect(() => {
     const fetchHousehold = async () => {
@@ -305,13 +355,14 @@ const RunnerDetails = ({ runner, seasonHistory, isLoading, onRunnerSelect }) => 
         <div className="p-4 sm:p-6 border-b border-gray-200">
           <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4">Profile Information</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            <DetailItem icon={User} label="Gender" value={runner.gender} />
-            <DetailItem icon={Gift} label="Age" value={(() => { const age = calculateAge(runner.dob); return age !== null ? age.toString() : undefined; })()} />
-            <DetailItem icon={Phone} label="Phone" value={runner.phone_no} />
-            <DetailItem icon={Map} label="Location" value={location} />
-            <DetailItem icon={Calendar} label="Member Since" value={runner.member_since} />
-            <DetailItem icon={Users} label="Referred By" value={runner.referred_by} />
-            <DetailItem icon={ChevronsRight} label="Most Recent Season" value={runner.most_recent_season} />
+            <DetailItem icon={User} label="Gender" value={runner.gender} onCopy={copyToClipboard} copiedItems={copiedItems} runnerId={runner.email_id} />
+            <DetailItem icon={Gift} label="Age" value={(() => { const age = calculateAge(runner.dob); return age !== null ? age.toString() : undefined; })()} onCopy={copyToClipboard} copiedItems={copiedItems} runnerId={runner.email_id} />
+            <DetailItem icon={Mail} label="Email" value={runner.email_id} onCopy={copyToClipboard} copiedItems={copiedItems} runnerId={runner.email_id} />
+            <DetailItem icon={Phone} label="Phone" value={runner.phone_no} onCopy={copyToClipboard} copiedItems={copiedItems} runnerId={runner.email_id} />
+            <DetailItem icon={Map} label="Location" value={location} onCopy={copyToClipboard} copiedItems={copiedItems} runnerId={runner.email_id} />
+            <DetailItem icon={Calendar} label="Member Since" value={runner.member_since} onCopy={copyToClipboard} copiedItems={copiedItems} runnerId={runner.email_id} />
+            <DetailItem icon={Users} label="Referred By" value={runner.referred_by} onCopy={copyToClipboard} copiedItems={copiedItems} runnerId={runner.email_id} />
+            <DetailItem icon={ChevronsRight} label="Most Recent Season" value={runner.most_recent_season} onCopy={copyToClipboard} copiedItems={copiedItems} runnerId={runner.email_id} />
           </div>
           
 

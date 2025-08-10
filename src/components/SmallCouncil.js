@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Users, Clock, CheckCircle, XCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
+import { useAuth } from '../contexts/AuthContext';
 
-const SmallCouncil = ({ coachEmail }) => {
+const SmallCouncil = ({ coachEmail, currentSeason }) => {
+  const { user, session, isAuthenticated } = useAuth();
   const [transferRequests, setTransferRequests] = useState([]);
   const [deferralRequests, setDeferralRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -11,6 +13,10 @@ const SmallCouncil = ({ coachEmail }) => {
   const [coachNames, setCoachNames] = useState({});
   const [activeTab, setActiveTab] = useState('transfer'); // 'transfer' or 'deferral'
   const [showCompleted, setShowCompleted] = useState(false); // NEW: toggle for showing completed requests
+  const [showTransferConfirmation, setShowTransferConfirmation] = useState(false);
+  const [pendingTransferId, setPendingTransferId] = useState(null);
+  const [removingTransferId, setRemovingTransferId] = useState(null);
+  const [successMessage, setSuccessMessage] = useState('');
 
   // Load action requests from database
   const loadActionRequests = useCallback(async () => {
@@ -155,7 +161,42 @@ const SmallCouncil = ({ coachEmail }) => {
   // Handle closing a transfer request
   const handleCloseTransfer = async (requestId) => {
     try {
-      const { error } = await supabase
+      // Check authentication first to satisfy RLS policies
+      if (!isAuthenticated || !user) {
+        console.error('User not authenticated');
+        alert('Authentication required. Please log in again.');
+        return;
+      }
+
+      // Get current session to ensure it's valid
+      const { data: { session }, error: authError } = await supabase.auth.getSession();
+      if (authError || !session) {
+        console.error('Session error:', authError);
+        alert('Session expired. Please log in again.');
+        return;
+      }
+
+      console.log('Authenticated user:', user.email);
+      console.log('Session valid:', !!session);
+      console.log('User ID type:', user.id);
+      console.log('Is override user:', user.id === 'override-user');
+      console.log('Real Supabase session:', !!session?.access_token);
+
+      // First, get the transfer request details to know what program was selected
+      const { data: transferRequest, error: fetchError } = await supabase
+        .from('rhwb_action_requests')
+        .select('*')
+        .eq('id', requestId)
+        .single();
+
+      if (fetchError) {
+        console.error('Error fetching transfer request:', fetchError);
+        alert('Failed to fetch transfer request details. Please try again.');
+        return;
+      }
+
+      // Update the action request status
+      const { error: updateError } = await supabase
         .from('rhwb_action_requests')
         .update({ 
           status: 'closed',
@@ -163,15 +204,118 @@ const SmallCouncil = ({ coachEmail }) => {
         })
         .eq('id', requestId);
 
-      if (error) {
-        console.error('Error closing transfer request:', error);
+      if (updateError) {
+        console.error('Error closing transfer request:', updateError);
         alert('Failed to close transfer request. Please try again.');
         return;
       }
 
-      // Refresh the data
-      loadActionRequests();
-      alert('Transfer request closed successfully!');
+      // Update runner_season_info table based on the selected program
+      if (!transferRequest.new_program || !transferRequest.runner_email_id || !currentSeason) {
+        console.error('Missing required data for runner update:', {
+          new_program: transferRequest.new_program,
+          runner_email_id: transferRequest.runner_email_id,
+          currentSeason: currentSeason
+        });
+        alert('Missing required data for runner update. Please check the transfer request details.');
+        return;
+      }
+
+      // Proceed with updating runner_season_info
+      let updateData = {};
+      
+      if (transferRequest.new_program === 'Lite') {
+        updateData = { coach: 'Lite' };
+        console.log(`Updating runner ${transferRequest.runner_email_id} to Lite program for season ${currentSeason}`);
+      } else {
+        // For race distances (5K, 10K, Half Marathon, Full Marathon)
+        updateData = { race_distance: transferRequest.new_program };
+        console.log(`Updating runner ${transferRequest.runner_email_id} to ${transferRequest.new_program} program for season ${currentSeason}`);
+      }
+
+      // First, check if a record already exists
+      console.log('Checking if runner_season_info record exists...');
+      const { data: existingRecord, error: checkError } = await supabase
+        .from('runner_season_info')
+        .select('*')
+        .eq('season', currentSeason)
+        .eq('email_id', transferRequest.runner_email_id)
+        .single();
+
+      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows returned
+        console.error('Error checking existing record:', checkError);
+      } else if (existingRecord) {
+        console.log('Existing record found:', existingRecord);
+      } else {
+        console.log('No existing record found - this will be a new insert');
+      }
+
+      // Update or insert record in runner_season_info
+      const upsertData = {
+        season: currentSeason,
+        email_id: transferRequest.runner_email_id,
+        ...updateData
+      };
+      
+      console.log('Attempting to upsert runner_season_info with data:', upsertData);
+      console.log('Current user context:', {
+        email: user.email,
+        role: user.role,
+        sessionId: session?.access_token ? 'valid' : 'invalid'
+      });
+
+      // Try to understand what the RLS policy might be checking for
+      console.log('RLS Policy Debug Info:', {
+        authenticatedUserEmail: user.email,
+        runnerEmail: transferRequest.runner_email_id,
+        selectedProgram: transferRequest.new_program,
+        currentSeason: currentSeason,
+        updateData: updateData
+      });
+
+      const { error: runnerUpdateError } = await supabase
+        .from('runner_season_info')
+        .upsert(upsertData, {
+          onConflict: 'season,email_id'
+        });
+
+      if (runnerUpdateError) {
+        console.error('Error updating runner season info:', runnerUpdateError);
+        console.error('Error details:', {
+          message: runnerUpdateError.message,
+          code: runnerUpdateError.code,
+          details: runnerUpdateError.details,
+          hint: runnerUpdateError.hint
+        });
+        
+        if (runnerUpdateError.message?.includes('row-level security policy')) {
+          alert(`RLS Policy Error: ${runnerUpdateError.message}. Please ensure you have proper permissions.`);
+        } else {
+          alert(`Database Error: ${runnerUpdateError.message}`);
+        }
+        return; // Fail the operation if we can't update runner info
+      }
+
+            // Show success message
+      let message = 'Transfer completed successfully!';
+      if (transferRequest.new_program) {
+        if (transferRequest.new_program === 'Lite') {
+          message += ` Runner assigned to Lite program.`;
+        } else {
+          message += ` Runner assigned to ${transferRequest.new_program} program.`;
+        }
+      }
+      setSuccessMessage(message);
+      
+      // Start the removal animation
+      setRemovingTransferId(requestId);
+      
+      // Wait for animation to complete, then refresh data
+      setTimeout(() => {
+        setRemovingTransferId(null);
+        setSuccessMessage('');
+        loadActionRequests();
+      }, 500); // 500ms for the slide animation
     } catch (error) {
       console.error('Error closing transfer request:', error);
       alert('Failed to close transfer request. Please try again.');
@@ -315,6 +459,14 @@ const SmallCouncil = ({ coachEmail }) => {
               <h2 className="text-lg sm:text-xl font-bold text-gray-900">Transfer Requests</h2>
             </div>
 
+            {/* Success Message */}
+            {successMessage && (
+              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center space-x-2 animate-pulse">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                <span className="text-sm text-green-800 font-medium">{successMessage}</span>
+              </div>
+            )}
+
             {transferRequests.length === 0 ? (
               <div className="text-center py-6 sm:py-8">
                 <Users className="h-8 w-8 sm:h-12 sm:w-12 mx-auto mb-3 sm:mb-4 text-gray-300" />
@@ -327,7 +479,14 @@ const SmallCouncil = ({ coachEmail }) => {
                   const coachName = coachNames[request.requestor_email_id];
 
                   return (
-                    <div key={request.id || index} className="border border-gray-200 rounded-lg p-3 sm:p-4 hover:shadow-md transition-shadow">
+                    <div 
+                      key={request.id || index} 
+                      className={`border border-gray-200 rounded-lg p-3 sm:p-4 hover:shadow-md transition-all duration-500 ease-in-out ${
+                        removingTransferId === request.id 
+                          ? 'transform -translate-x-full opacity-0 max-h-0 overflow-hidden' 
+                          : 'transform translate-x-0 opacity-100 max-h-96'
+                      }`}
+                    >
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-3">
                         <div className="flex-1 mb-3 sm:mb-0">
                           <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 mb-2">
@@ -356,10 +515,13 @@ const SmallCouncil = ({ coachEmail }) => {
                           {getStatusBadge(request.status)}
                           {request.status !== 'closed' && (
                             <button
-                              onClick={() => handleCloseTransfer(request.id)}
+                              onClick={() => {
+                                setPendingTransferId(request.id);
+                                setShowTransferConfirmation(true);
+                              }}
                               className="px-2 sm:px-3 py-1 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition-colors"
                             >
-                              Mark Completed
+                              Transfer Runner
                             </button>
                           )}
                         </div>
@@ -426,6 +588,53 @@ const SmallCouncil = ({ coachEmail }) => {
           </div>
         )}
       </div>
+
+      {/* Transfer Confirmation Modal */}
+      {showTransferConfirmation && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            {/* Header */}
+            <div className="flex items-center space-x-3 p-6 border-b border-gray-200">
+              <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+              <h2 className="text-xl font-bold text-gray-900">Confirm Transfer</h2>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              <p className="text-gray-700 mb-4">
+                Are you sure you want to transfer the runner? This action cannot be undone.
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-between p-6 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowTransferConfirmation(false);
+                  setPendingTransferId(null);
+                }}
+                className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (pendingTransferId) {
+                    handleCloseTransfer(pendingTransferId);
+                  }
+                  setShowTransferConfirmation(false);
+                  setPendingTransferId(null);
+                }}
+                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+              >
+                Confirm Transfer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

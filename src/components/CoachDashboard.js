@@ -84,8 +84,6 @@ const CoachDashboard = () => {
 
 
         if (!error && data) {
-          console.log('Current season state (before update):', season);
-          console.log('Database returned:', data.id);
           setSeason(data.id);
         }
       } catch (error) {
@@ -1394,7 +1392,7 @@ const CoachDashboard = () => {
       ) : currentView === 'rhwb-connect' ? (
         <RHWBConnect />
       ) : currentView === 'small-council' ? (
-        <SmallCouncil coachEmail={coachEmail} />
+        <SmallCouncil coachEmail={coachEmail} currentSeason={currentSeason} />
       ) : (
         <KnowYourRunner 
           cohortData={cohortData}
