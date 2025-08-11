@@ -1353,7 +1353,7 @@ const CoachDashboard = () => {
                     disabled={!editingCards[runner.id]}
                     rows={3}
                     className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:bg-gray-50 disabled:text-gray-500 text-sm sm:text-base"
-                    placeholder="Enter your coaching notes..."
+                    placeholder="Enter Runner's Qualitative Score"
                   />
                 </div>
 
