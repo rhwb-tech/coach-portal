@@ -1,29 +1,143 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, CheckCircle, Key } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import AuthOTPVerification from './AuthOTPVerification';
+
+// Mock AuthContext for demonstration
+const useAuth = () => {
+  const [isLoading, setIsLoading] = useState(false);
+  const [user, setUser] = useState(null);
+  const [authError, setAuthError] = useState('');
+  
+  const login = async (email, rememberMe) => {
+    setIsLoading(true);
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    setIsLoading(false);
+    
+    // For demo: always return success to show OTP screen
+    // In your real app, this would check if the email is authorized
+    return { success: true };
+  };
+  
+  const logout = () => {
+    setUser(null);
+  };
+  
+  const clearEmailSent = () => {
+    // Clear any email sent state
+  };
+  
+  return {
+    login,
+    logout,
+    isLoading,
+    isEmailSent: false,
+    clearEmailSent,
+    user,
+    authError
+  };
+};
+
+// Mock OTP Verification Component
+const AuthOTPVerification = ({ email, onBack, onSuccess }) => {
+  const [otp, setOtp] = useState('');
+  const [error, setError] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+  
+  const handleVerify = async () => {
+    if (otp.length !== 6) {
+      setError('Please enter a 6-digit code');
+      return;
+    }
+    
+    setIsVerifying(true);
+    // Simulate OTP verification
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // For demo: accept any 6-digit code
+    if (otp === '123456') {
+      onSuccess({ email, role: 'user' });
+    } else {
+      setError('Invalid OTP. Try 123456 for demo.');
+    }
+    setIsVerifying(false);
+  };
+  
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
+      <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-8 shadow-xl border border-gray-200 max-w-md w-full">
+        <div className="text-center mb-8">
+          <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-4 rounded-xl mb-6 inline-block">
+            <Key className="h-8 w-8 text-white" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Enter Verification Code</h2>
+          <p className="text-gray-600">We've sent a 6-digit code to</p>
+          <p className="text-blue-600 font-medium">{email}</p>
+        </div>
+        
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-red-700 text-sm">{error}</p>
+          </div>
+        )}
+        
+        <div className="space-y-6">
+          <div>
+            <label htmlFor="otp" className="block text-sm font-medium text-gray-700 mb-2">
+              6-Digit Code
+            </label>
+            <input
+              id="otp"
+              type="text"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  handleVerify();
+                }
+              }}
+              className="block w-full px-4 py-3 text-center text-2xl font-mono border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="000000"
+              maxLength="6"
+            />
+          </div>
+          
+          <button
+            onClick={handleVerify}
+            disabled={isVerifying}
+            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 px-4 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isVerifying ? 'Verifying...' : 'Verify Code'}
+          </button>
+          
+          <button
+            onClick={onBack}
+            className="w-full text-gray-600 hover:text-gray-800 text-sm font-medium"
+          >
+            ← Back to login
+          </button>
+        </div>
+        
+        <div className="mt-6 text-center">
+          <p className="text-xs text-gray-500">
+            Didn't receive the code? Check your spam folder or try again.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const AuthMagicLink = () => {
-  const { login, logout, isLoading, isEmailSent, clearEmailSent, user, authError } = useAuth();
+  const { login, logout, isLoading, clearEmailSent, user, authError } = useAuth();
   const [email, setEmail] = useState('');
   const [loginError, setLoginError] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
+  const [showOTPVerification, setShowOTPVerification] = useState(false);
   
   // Debug state - remove this in production
   useEffect(() => {
-    console.log('DEBUG: isEmailSent state:', isEmailSent);
-  }, [isEmailSent]);
-
-  // Load saved email on component mount
-  useEffect(() => {
-    const savedEmail = localStorage.getItem('rhwb-coach-portal_user_email');
-    const savedRememberMe = localStorage.getItem('rhwb-coach-portal_remember_me');
-    
-    if (savedEmail && savedRememberMe === 'true') {
-      setEmail(savedEmail);
-      setRememberMe(true);
-    }
-  }, []);
+    console.log('DEBUG: showOTPVerification state:', showOTPVerification);
+  }, [showOTPVerification]);
 
   // Check if we're in override mode
   const urlParams = new URLSearchParams(window.location.search);
@@ -33,13 +147,13 @@ const AuthMagicLink = () => {
   const handleLogin = async () => {
     setLoginError('');
     
-    console.log('DEBUG: Attempting login with email:', email);
-    
     if (!email) {
       setLoginError('Please enter your email address');
       return;
     }
 
+    console.log('DEBUG: Attempting login with email:', email);
+    
     try {
       const result = await login(email, rememberMe);
       console.log('DEBUG: Login result:', result);
@@ -49,8 +163,9 @@ const AuthMagicLink = () => {
         setLoginError(errorMessage);
         alert(errorMessage);
       } else {
-        // OTP sent successfully - AuthContext will set isEmailSent to true
-        console.log('DEBUG: OTP sent successfully, isEmailSent should be true');
+        // OTP sent successfully, show verification screen
+        console.log('DEBUG: Setting showOTPVerification to true');
+        setShowOTPVerification(true);
       }
     } catch (error) {
       console.error('DEBUG: Login error:', error);
@@ -64,16 +179,19 @@ const AuthMagicLink = () => {
   };
 
   const handleOTPSuccess = (session) => {
-    // OTP verification successful, user will be automatically logged in
-    clearEmailSent();
+    console.log('DEBUG: OTP verification successful');
+    setShowOTPVerification(false);
+    // In real app, this would set the user state
   };
 
   const handleOTPBack = () => {
+    console.log('DEBUG: Going back from OTP screen');
+    setShowOTPVerification(false);
     clearEmailSent();
   };
 
-  // Show loading spinner while checking authentication (but not during OTP verification)
-  if (isLoading && !isEmailSent) {
+  // Show loading spinner while checking authentication
+  if (isLoading && !showOTPVerification) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
         <div className="text-center">
@@ -88,7 +206,6 @@ const AuthMagicLink = () => {
   if (user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-        {/* Header with user info and logout */}
         <div className="bg-white/90 backdrop-blur-sm border-b border-gray-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
@@ -117,7 +234,6 @@ const AuthMagicLink = () => {
           </div>
         </div>
         
-        {/* Main content */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="text-center">
             <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
@@ -129,8 +245,8 @@ const AuthMagicLink = () => {
     );
   }
 
-  // Show OTP verification if needed - This should render when isEmailSent is true
-  if (isEmailSent) {
+  // Show OTP verification if needed - This should render when showOTPVerification is true
+  if (showOTPVerification) {
     console.log('DEBUG: Rendering OTP verification screen');
     return (
       <AuthOTPVerification
@@ -154,14 +270,12 @@ const AuthMagicLink = () => {
             <p className="text-gray-600">Sign in with your authorized email to access the dashboard</p>
           </div>
 
-          {/* Error Messages */}
           {(loginError || authError) && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
               <p className="text-red-700 text-sm">{loginError || authError}</p>
             </div>
           )}
 
-          {/* OTP Authentication Info */}
           <div className="mb-6">
             <div className="flex items-center justify-center mb-3">
               <Key className="h-5 w-5 text-blue-600 mr-2" />
@@ -172,9 +286,7 @@ const AuthMagicLink = () => {
             </p>
           </div>
 
-          {/* Login Form */}
           <div className="space-y-6">
-            {/* Email Field */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                 Email Address
@@ -201,7 +313,6 @@ const AuthMagicLink = () => {
               </div>
             </div>
 
-            {/* Remember Me Checkbox */}
             <div className="flex items-center">
               <input
                 type="checkbox"
@@ -218,11 +329,9 @@ const AuthMagicLink = () => {
             <div className="text-xs text-gray-500">
               {rememberMe 
                 ? "Your login is saved on this computer permanently until you sign out."
-                : "Your login will only last for this browser session. Uncheck if using a public computer."
-              }
+                : "Your login will only last for this browser session."}
             </div>
 
-            {/* Submit Button */}
             <button
               onClick={handleLogin}
               disabled={isLoading}
@@ -257,4 +366,4 @@ const AuthMagicLink = () => {
   );
 };
 
-export default AuthMagicLink; 
+export default AuthMagicLink;

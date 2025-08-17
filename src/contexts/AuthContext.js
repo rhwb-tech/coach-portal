@@ -3,6 +3,14 @@ import { supabase } from '../services/supabaseClient';
 
 const AuthContext = createContext();
 
+// App-specific configuration
+const APP_CONFIG = {
+  name: 'RHWB Coach Portal',
+  storagePrefix: 'rhwb-coach-portal',
+  redirectUrl: '/auth/callback',
+  emailSubject: 'Sign in to RHWB Coach Portal'
+};
+
 // Helper function to validate email against v_rhwb_roles view
 const validateEmailAccess = async (email) => {
   try {
@@ -270,7 +278,7 @@ export const AuthProvider = ({ children }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Magic link login
+  // OTP login
   const login = async (email, rememberMe = false) => {
     try {
       setAuthError(null);
@@ -284,12 +292,16 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: validation.error || 'Email address not authorized' };
       }
 
-      // If email is valid, send magic link
+      // If email is valid, send OTP
       const { error } = await supabase.auth.signInWithOtp({
         email: email.toLowerCase(),
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-          shouldCreateUser: true
+          shouldCreateUser: true,
+          data: {
+            app: APP_CONFIG.name,
+            app_domain: window.location.hostname,
+            auth_method: 'otp'
+          }
         }
       });
 
@@ -301,19 +313,19 @@ export const AuthProvider = ({ children }) => {
         if (error.message.includes('signups not allowed')) {
           return { 
             success: false, 
-            error: 'Email signup is disabled in Supabase. Please contact your administrator to enable email signup for magic link authentication.' 
+            error: 'Email signup is disabled in Supabase. Please contact your administrator to enable email signup for authentication.' 
           };
         }
         return { success: false, error: error.message };
       }
 
-      // Store remember me preference
+      // Store remember me preference with app-specific keys
       if (rememberMe) {
-        localStorage.setItem('rhwb_remember_me', 'true');
-        localStorage.setItem('rhwb_user_email', email.toLowerCase());
+        localStorage.setItem(`${APP_CONFIG.storagePrefix}_remember_me`, 'true');
+        localStorage.setItem(`${APP_CONFIG.storagePrefix}_user_email`, email.toLowerCase());
       } else {
-        localStorage.removeItem('rhwb_remember_me');
-        localStorage.removeItem('rhwb_user_email');
+        localStorage.removeItem(`${APP_CONFIG.storagePrefix}_remember_me`);
+        localStorage.removeItem(`${APP_CONFIG.storagePrefix}_user_email`);
       }
 
       setIsEmailSent(true);
@@ -341,9 +353,9 @@ export const AuthProvider = ({ children }) => {
       setUser(null);
       setSession(null);
       
-      // Clear local storage on logout
-      localStorage.removeItem('rhwb_remember_me');
-      localStorage.removeItem('rhwb_user_email');
+      // Clear app-specific local storage on logout
+      localStorage.removeItem(`${APP_CONFIG.storagePrefix}_remember_me`);
+      localStorage.removeItem(`${APP_CONFIG.storagePrefix}_user_email`);
       
       return { success: true };
     } catch (error) {

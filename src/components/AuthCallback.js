@@ -8,22 +8,46 @@ const AuthCallback = () => {
   useEffect(() => {
     const handleAuthCallback = async () => {
       try {
+        console.log('Coach Portal AuthCallback: Starting authentication callback...');
+        
+        // Check if we have a hash in the URL (magic link)
+        const hash = window.location.hash;
+        console.log('Coach Portal AuthCallback: URL hash:', hash);
+        
+        // Check for access token in URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const accessToken = urlParams.get('access_token');
+        const refreshToken = urlParams.get('refresh_token');
+        
+        console.log('Coach Portal AuthCallback: Access token in URL:', !!accessToken);
+        console.log('Coach Portal AuthCallback: Refresh token in URL:', !!refreshToken);
+        
         const { data, error } = await supabase.auth.getSession();
         
+        console.log('Coach Portal AuthCallback: getSession result:', { 
+          hasData: !!data, 
+          hasSession: !!data?.session, 
+          error: error?.message 
+        });
+        
         if (error) {
+          console.error('Coach Portal AuthCallback: Session error:', error);
           setError(error.message);
           setIsLoading(false);
           return;
         }
 
         if (data.session) {
+          console.log('Coach Portal AuthCallback: Session found, redirecting to main app...');
           // Successfully authenticated, redirect to main app
           window.location.href = '/';
         } else {
+          console.error('Coach Portal AuthCallback: No session found after authentication');
           setError('No session found after authentication');
           setIsLoading(false);
         }
       } catch (err) {
+        console.error('Coach Portal AuthCallback: Unexpected error:', err);
         setError('An unexpected error occurred during authentication');
         setIsLoading(false);
       }
