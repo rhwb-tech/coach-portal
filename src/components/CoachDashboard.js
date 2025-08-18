@@ -1345,7 +1345,7 @@ const CoachDashboard = () => {
                 {/* Qualitative Score */}
                 <div className="mb-4 sm:mb-6">
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
-                    Coach Notes
+                    Qualitative Score for the Meso Cycle
                   </label>
                   <textarea
                     value={editingCards[runner.id] ? (cardData[runner.id]?.qualitativeScore || '') : runner.qualitativeScore}
