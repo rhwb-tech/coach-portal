@@ -9,10 +9,7 @@ const AuthMagicLink = () => {
   const [loginError, setLoginError] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   
-  // Debug state - remove this in production
-  useEffect(() => {
-    console.log('DEBUG: isEmailSent state:', isEmailSent);
-  }, [isEmailSent]);
+
 
   // Load saved email on component mount
   useEffect(() => {
@@ -33,8 +30,6 @@ const AuthMagicLink = () => {
   const handleLogin = async () => {
     setLoginError('');
     
-    console.log('DEBUG: Attempting login with email:', email);
-    
     if (!email) {
       setLoginError('Please enter your email address');
       return;
@@ -42,15 +37,16 @@ const AuthMagicLink = () => {
 
     try {
       const result = await login(email, rememberMe);
-      console.log('DEBUG: Login result:', result);
       
       if (!result.success) {
         const errorMessage = result.error || 'Failed to send OTP';
         setLoginError(errorMessage);
         alert(errorMessage);
+      } else if (result.fromSession) {
+        // User authenticated from session - no OTP needed
+        // The user state will be set by the login function, so we don't need to do anything else
       } else {
         // OTP sent successfully - AuthContext will set isEmailSent to true
-        console.log('DEBUG: OTP sent successfully, isEmailSent should be true');
       }
     } catch (error) {
       console.error('DEBUG: Login error:', error);
@@ -65,7 +61,7 @@ const AuthMagicLink = () => {
 
   const handleOTPSuccess = (session) => {
     // OTP verification successful, user will be automatically logged in
-    clearEmailSent();
+    // Don't clear email sent state immediately - let the auth state change handle it
   };
 
   const handleOTPBack = () => {
@@ -131,7 +127,6 @@ const AuthMagicLink = () => {
 
   // Show OTP verification if needed - This should render when isEmailSent is true
   if (isEmailSent) {
-    console.log('DEBUG: Rendering OTP verification screen');
     return (
       <AuthOTPVerification
         email={email}
@@ -161,14 +156,14 @@ const AuthMagicLink = () => {
             </div>
           )}
 
-          {/* OTP Authentication Info */}
+          {/* Authentication Info */}
           <div className="mb-6">
             <div className="flex items-center justify-center mb-3">
               <Key className="h-5 w-5 text-blue-600 mr-2" />
-              <span className="text-sm font-medium text-gray-700">OTP Authentication</span>
+              <span className="text-sm font-medium text-gray-700">Secure Authentication</span>
             </div>
             <p className="text-xs text-gray-500 text-center">
-              We'll send you a 6-digit code to enter on the next screen
+              If you have an active session, you'll be signed in immediately. Otherwise, we'll send you a 6-digit code.
             </p>
           </div>
 
@@ -231,10 +226,10 @@ const AuthMagicLink = () => {
               {isLoading ? (
                 <div className="flex items-center justify-center">
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                  Sending OTP...
+                  Authenticating...
                 </div>
               ) : (
-                'Send OTP Code'
+                'Sign In'
               )}
             </button>
           </div>

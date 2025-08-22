@@ -9,7 +9,7 @@ import SmallCouncil from './SmallCouncil';
 import UserGuide from './UserGuide';
 
 const CoachDashboard = () => {
-  const { user, isLoading, logout } = useAuth();
+  const { user, isLoading, logout, isEmailSent } = useAuth();
   
   // Get coach email from authenticated user or URL override
   const urlParams = new URLSearchParams(window.location.search);
@@ -53,15 +53,56 @@ const CoachDashboard = () => {
   // Validation warning states
   const [validationWarnings, setValidationWarnings] = useState({});
   
-  // Navigation state
-  const [currentView, setCurrentView] = useState('know-your-runner'); // 'dashboard', 'rhwb-connect', 'know-your-runner', or 'small-council'
+  // Navigation state - persist in localStorage
+  const [currentView, setCurrentView] = useState(() => {
+    const savedView = localStorage.getItem('rhwb-coach-portal-current-view');
+    return savedView || 'know-your-runner';
+  });
   
+  // Helper function to check if user is admin (handles loading state)
+  const isAdmin = () => {
+    return !isLoading && (user?.role === 'admin' || user?.role === 'Admin');
+  };
+
+  // Helper function to update current view and persist it
+  const updateCurrentView = (newView) => {
+    setCurrentView(newView);
+    localStorage.setItem('rhwb-coach-portal-current-view', newView);
+  };
+
   // Redirect to default view if user doesn't have access to current view
   useEffect(() => {
-    if (currentView === 'small-council' && user?.role !== 'admin' && user?.role !== 'Admin') {
-      setCurrentView('know-your-runner');
+    if (currentView === 'small-council' && !isAdmin()) {
+      updateCurrentView('know-your-runner');
     }
-  }, [currentView, user?.role]);
+  }, [currentView, user?.role, isLoading]);
+
+  // Handle page visibility changes to prevent unnecessary re-renders
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      // When tab becomes visible, don't trigger any state changes
+      // Just log for debugging
+      if (!document.hidden) {
+        console.log('Tab became visible - maintaining current state');
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  // Cleanup localStorage on unmount (optional)
+  useEffect(() => {
+    return () => {
+      // Only cleanup if we're not in a valid state
+      if (!user) {
+        localStorage.removeItem('rhwb-coach-portal-current-view');
+      }
+    };
+  }, [user]);
 
   // Get unique filter options from data
   // Store all data and filter options
@@ -398,14 +439,21 @@ const CoachDashboard = () => {
 
   // Handle redirect to Wix website when no authentication
   useEffect(() => {
-    if (!isLoading && !coachEmail) {
+    // Only redirect if we're not loading AND we have no coach email AND we're not in override mode AND no user is authenticated
+    // AND we're not in the middle of OTP verification AND we've been in this state for at least 5 seconds
+    // AND the page is visible (not in background tab)
+    if (!isLoading && !coachEmail && !overrideEmail && !user && !isEmailSent && !document.hidden) {
       const redirectTimer = setTimeout(() => {
+        console.log('Redirecting to Wix website due to no authentication');
         window.location.href = 'https://www.rhwb.org/coach-portal';
-      }, 3000); // 3 second delay
+      }, 5000); // 5 second delay to prevent redirects during tab switches
 
-      return () => clearTimeout(redirectTimer);
+      return () => {
+        clearTimeout(redirectTimer);
+        console.log('Redirect timer cleared');
+      };
     }
-  }, [isLoading, coachEmail]);
+  }, [isLoading, coachEmail, overrideEmail, user, isEmailSent]);
 
   const distanceOptions = filterOptions.distances;
   
@@ -853,7 +901,7 @@ const CoachDashboard = () => {
             <nav className="p-4 space-y-2">
               <button
                 onClick={() => {
-                  setCurrentView('know-your-runner');
+                  updateCurrentView('know-your-runner');
                   setHamburgerMenuOpen(false);
                 }}
                 className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
@@ -868,7 +916,7 @@ const CoachDashboard = () => {
               
               <button
                 onClick={() => {
-                  setCurrentView('rhwb-connect');
+                  updateCurrentView('rhwb-connect');
                   setHamburgerMenuOpen(false);
                 }}
                 className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
@@ -883,7 +931,7 @@ const CoachDashboard = () => {
               
               <button
                 onClick={() => {
-                  setCurrentView('dashboard');
+                  updateCurrentView('dashboard');
                   setHamburgerMenuOpen(false);
                 }}
                 className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
@@ -896,10 +944,10 @@ const CoachDashboard = () => {
                 <span>Runner Metrics</span>
               </button>
               
-              {(user?.role === 'admin' || user?.role === 'Admin') && (
+              {isAdmin() && (
                 <button
                   onClick={() => {
-                    setCurrentView('small-council');
+                    updateCurrentView('small-council');
                     setHamburgerMenuOpen(false);
                   }}
                   className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
@@ -1037,10 +1085,10 @@ const CoachDashboard = () => {
           {/* Navigation Items */}
           <nav className="p-4 space-y-2">
             <button
-              onClick={() => {
-                setCurrentView('know-your-runner');
-                setHamburgerMenuOpen(false);
-              }}
+                          onClick={() => {
+              updateCurrentView('know-your-runner');
+              setHamburgerMenuOpen(false);
+            }}
               className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
                 currentView === 'know-your-runner' 
                   ? 'bg-blue-50 text-blue-700 border border-blue-200' 
@@ -1052,10 +1100,10 @@ const CoachDashboard = () => {
             </button>
             
             <button
-              onClick={() => {
-                setCurrentView('rhwb-connect');
-                setHamburgerMenuOpen(false);
-              }}
+                          onClick={() => {
+              updateCurrentView('rhwb-connect');
+              setHamburgerMenuOpen(false);
+            }}
               className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
                 currentView === 'rhwb-connect' 
                   ? 'bg-blue-50 text-blue-700 border border-blue-200' 
@@ -1067,10 +1115,10 @@ const CoachDashboard = () => {
             </button>
             
             <button
-              onClick={() => {
-                setCurrentView('dashboard');
-                setHamburgerMenuOpen(false);
-              }}
+                          onClick={() => {
+              updateCurrentView('dashboard');
+              setHamburgerMenuOpen(false);
+            }}
               className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
                 currentView === 'dashboard' 
                   ? 'bg-blue-50 text-blue-700 border border-blue-200' 
@@ -1081,12 +1129,12 @@ const CoachDashboard = () => {
               <span>Runner Metrics</span>
             </button>
             
-            {(user?.role === 'admin' || user?.role === 'Admin') && (
+            {isAdmin() && (
               <button
-                onClick={() => {
-                  setCurrentView('small-council');
-                  setHamburgerMenuOpen(false);
-                }}
+                            onClick={() => {
+              updateCurrentView('small-council');
+              setHamburgerMenuOpen(false);
+            }}
                 className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
                   currentView === 'small-council' 
                     ? 'bg-blue-50 text-blue-700 border border-blue-200' 

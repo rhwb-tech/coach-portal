@@ -40,7 +40,8 @@ const AuthCallback = () => {
         if (data.session) {
           console.log('Coach Portal AuthCallback: Session found, redirecting to main app...');
           // Successfully authenticated, redirect to main app
-          window.location.href = '/';
+          // Use window.location.replace to avoid adding to browser history
+          window.location.replace('/');
         } else {
           console.error('Coach Portal AuthCallback: No session found after authentication');
           setError('No session found after authentication');
@@ -84,7 +85,7 @@ const AuthCallback = () => {
               Please try signing in again or contact support if the problem persists.
             </p>
             <button
-              onClick={() => window.location.href = '/'}
+              onClick={() => window.location.replace('/')}
               className="mt-6 w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 px-4 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200"
             >
               Back to Sign In

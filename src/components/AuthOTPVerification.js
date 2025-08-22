@@ -79,10 +79,13 @@ const AuthOTPVerification = ({ email, onBack, onSuccess }) => {
       });
 
       if (error) {
+        console.log('OTP verification error:', error);
         setError(error.message);
       } else if (data.session) {
+        console.log('OTP verification successful, calling onSuccess with session:', data.session);
         onSuccess(data.session);
       } else {
+        console.log('OTP verification failed - no session returned');
         setError('Invalid OTP code. Please try again.');
       }
     } catch (err) {

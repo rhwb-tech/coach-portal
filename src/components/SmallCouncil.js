@@ -4,23 +4,48 @@ import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 
 const SmallCouncil = ({ coachEmail, currentSeason }) => {
-  const { user, session, isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
+  
+
   const [transferRequests, setTransferRequests] = useState([]);
   const [deferralRequests, setDeferralRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [runnerDetails, setRunnerDetails] = useState({});
   const [coachNames, setCoachNames] = useState({});
-  const [activeTab, setActiveTab] = useState('transfer'); // 'transfer' or 'deferral'
-  const [showCompleted, setShowCompleted] = useState(false); // NEW: toggle for showing completed requests
+  // Persist state in localStorage to survive tab switches
+  const [activeTab, setActiveTab] = useState(() => {
+    const savedTab = localStorage.getItem('rhwb-smallcouncil-active-tab');
+    return savedTab || 'transfer';
+  });
+  const [showCompleted, setShowCompleted] = useState(() => {
+    const savedShowCompleted = localStorage.getItem('rhwb-smallcouncil-show-completed');
+    return savedShowCompleted === 'true';
+  });
   const [showTransferConfirmation, setShowTransferConfirmation] = useState(false);
   const [pendingTransferId, setPendingTransferId] = useState(null);
   const [removingTransferId, setRemovingTransferId] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
 
+  // Helper functions to update state and persist to localStorage
+  const updateActiveTab = (tab) => {
+    setActiveTab(tab);
+    localStorage.setItem('rhwb-smallcouncil-active-tab', tab);
+  };
+
+  const updateShowCompleted = (show) => {
+    setShowCompleted(show);
+    localStorage.setItem('rhwb-smallcouncil-show-completed', show.toString());
+  };
+
   // Load action requests from database
   const loadActionRequests = useCallback(async () => {
     try {
+      // Don't show loading if we already have data and the page is not visible
+      if (transferRequests.length > 0 && document.hidden) {
+        return;
+      }
+      
       setLoading(true);
       setError(null);
 
@@ -37,9 +62,6 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
       }
 
       const { data: transferData, error: transferError } = await transferQuery;
-      
-      console.log('Transfer data:', transferData);
-      console.log('Show completed:', showCompleted);
 
       if (transferError) {
         console.error('Error fetching transfer requests:', transferError);
@@ -59,8 +81,6 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
       }
 
       const { data: deferralData, error: deferralError } = await deferralQuery;
-      
-      console.log('Deferral data:', deferralData);
 
       if (deferralError) {
         console.error('Error fetching deferral requests:', deferralError);
@@ -77,12 +97,11 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
         
         // Load runner details
         const runnerDetailsMap = {};
-        console.log('Loading runner details for emails:', runnerEmails);
         for (const email of runnerEmails) {
           const details = await getRunnerDetails(email);
           runnerDetailsMap[email] = details;
         }
-        console.log('Runner details map:', runnerDetailsMap);
+
         setRunnerDetails(runnerDetailsMap);
         
         // Load coach names
@@ -100,17 +119,50 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
     } finally {
       setLoading(false);
     }
-  }, [showCompleted]);
+  }, [showCompleted, transferRequests.length]);
 
   useEffect(() => {
-    loadActionRequests();
-  }, [coachEmail, showCompleted, loadActionRequests]);
+    // Only load data if we have a valid coachEmail and user is authenticated
+    // AND the page is visible (not in background tab)
+    if (coachEmail && user && !document.hidden) {
+      // Add a small delay to prevent rapid re-loading during tab switches
+      const timer = setTimeout(() => {
+        loadActionRequests();
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }
+  }, [coachEmail, showCompleted, loadActionRequests, user]);
+
+  // Handle page visibility changes to maintain state during tab switches
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      // When tab becomes visible and we have valid data, don't reload unnecessarily
+      if (!document.hidden && coachEmail && user && transferRequests.length > 0) {
+        // Maintain state without reloading
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [coachEmail, user, transferRequests.length]);
+
+  // Cleanup localStorage on unmount if user is not authenticated
+  useEffect(() => {
+    return () => {
+      if (!user) {
+        localStorage.removeItem('rhwb-smallcouncil-active-tab');
+        localStorage.removeItem('rhwb-smallcouncil-show-completed');
+      }
+    };
+  }, [user]);
 
   // Get runner details for display
   const getRunnerDetails = async (emailId) => {
     try {
-      console.log('Fetching runner details for email:', emailId);
-      
       // Try to get runner name from runners_profile table
       const { data, error } = await supabase
         .from('runners_profile')
@@ -125,7 +177,6 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
         return { runner_name: emailId, race_distance: 'N/A', location: 'N/A' };
       }
 
-      console.log('Runner details found:', data);
       return { 
         runner_name: data?.runner_name || emailId, 
         race_distance: 'N/A', 
@@ -176,11 +227,7 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
         return;
       }
 
-      console.log('Authenticated user:', user.email);
-      console.log('Session valid:', !!session);
-      console.log('User ID type:', user.id);
-      console.log('Is override user:', user.id === 'override-user');
-      console.log('Real Supabase session:', !!session?.access_token);
+
 
       // First, get the transfer request details to know what program was selected
       const { data: transferRequest, error: fetchError } = await supabase
@@ -226,16 +273,13 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
       
       if (transferRequest.new_program === 'Lite') {
         updateData = { coach: 'Lite' };
-        console.log(`Updating runner ${transferRequest.runner_email_id} to Lite program for season ${currentSeason}`);
       } else {
         // For race distances (5K, 10K, Half Marathon, Full Marathon)
         updateData = { race_distance: transferRequest.new_program };
-        console.log(`Updating runner ${transferRequest.runner_email_id} to ${transferRequest.new_program} program for season ${currentSeason}`);
       }
 
       // First, check if a record already exists
-      console.log('Checking if runner_season_info record exists...');
-      const { data: existingRecord, error: checkError } = await supabase
+      const { error: checkError } = await supabase
         .from('runner_season_info')
         .select('*')
         .eq('season', currentSeason)
@@ -244,10 +288,6 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
 
       if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows returned
         console.error('Error checking existing record:', checkError);
-      } else if (existingRecord) {
-        console.log('Existing record found:', existingRecord);
-      } else {
-        console.log('No existing record found - this will be a new insert');
       }
 
       // Update or insert record in runner_season_info
@@ -256,22 +296,6 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
         email_id: transferRequest.runner_email_id,
         ...updateData
       };
-      
-      console.log('Attempting to upsert runner_season_info with data:', upsertData);
-      console.log('Current user context:', {
-        email: user.email,
-        role: user.role,
-        sessionId: session?.access_token ? 'valid' : 'invalid'
-      });
-
-      // Try to understand what the RLS policy might be checking for
-      console.log('RLS Policy Debug Info:', {
-        authenticatedUserEmail: user.email,
-        runnerEmail: transferRequest.runner_email_id,
-        selectedProgram: transferRequest.new_program,
-        currentSeason: currentSeason,
-        updateData: updateData
-      });
 
       const { error: runnerUpdateError } = await supabase
         .from('runner_season_info')
@@ -404,7 +428,7 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-200">
           <div className="flex flex-1">
             <button
-              onClick={() => setActiveTab('transfer')}
+                              onClick={() => updateActiveTab('transfer')}
               className={`flex items-center space-x-1 sm:space-x-2 px-3 sm:px-6 py-3 sm:py-4 font-medium transition-colors text-sm sm:text-base flex-1 sm:flex-none ${
                 activeTab === 'transfer'
                   ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
@@ -419,7 +443,7 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
               </span>
             </button>
             <button
-              onClick={() => setActiveTab('deferral')}
+                              onClick={() => updateActiveTab('deferral')}
               className={`flex items-center space-x-1 sm:space-x-2 px-3 sm:px-6 py-3 sm:py-4 font-medium transition-colors text-sm sm:text-base flex-1 sm:flex-none ${
                 activeTab === 'deferral'
                   ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50'
@@ -439,7 +463,7 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
               type="checkbox"
               id="showCompleted"
               checked={showCompleted}
-              onChange={(e) => setShowCompleted(e.target.checked)}
+                              onChange={(e) => updateShowCompleted(e.target.checked)}
               className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
             />
             <label htmlFor="showCompleted" className="text-xs sm:text-sm text-gray-700 font-medium">
