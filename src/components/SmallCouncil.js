@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Users, Clock, CheckCircle, XCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { Users, Clock, CheckCircle, XCircle, AlertCircle, RefreshCw, ExternalLink } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import { finalSurgeService } from '../services/finalSurgeService';
 
 const SmallCouncil = ({ coachEmail, currentSeason }) => {
   const { user, isAuthenticated } = useAuth();
@@ -26,6 +27,7 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
   const [pendingTransferId, setPendingTransferId] = useState(null);
   const [removingTransferId, setRemovingTransferId] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
+  const [fsTransferLoading, setFsTransferLoading] = useState(null);
 
   // Helper functions to update state and persist to localStorage
   const updateActiveTab = (tab) => {
@@ -346,6 +348,33 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
     }
   };
 
+  // Handle FinalSurge transfer
+  const handleFinalSurgeTransfer = async (request) => {
+    try {
+      setFsTransferLoading(request.id);
+      
+      const result = await finalSurgeService.transferRunner(
+        request.runner_email_id,
+        runnerDetails[request.runner_email_id]?.runner_name || request.runner_email_id,
+        request.id
+      );
+
+      if (result.success) {
+        setSuccessMessage(result.message);
+        setTimeout(() => {
+          setSuccessMessage('');
+        }, 3000);
+      } else {
+        alert(`Transfer failed: ${result.message}`);
+      }
+    } catch (error) {
+      console.error('FinalSurge transfer error:', error);
+      alert(`Transfer failed: ${error.message}`);
+    } finally {
+      setFsTransferLoading(null);
+    }
+  };
+
   // Format date for display
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -538,15 +567,34 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
                         <div className="flex items-center justify-between sm:justify-end space-x-2">
                           {getStatusBadge(request.status)}
                           {request.status !== 'closed' && (
-                            <button
-                              onClick={() => {
-                                setPendingTransferId(request.id);
-                                setShowTransferConfirmation(true);
-                              }}
-                              className="px-2 sm:px-3 py-1 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition-colors"
-                            >
-                              Transfer Runner
-                            </button>
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => handleFinalSurgeTransfer(request)}
+                                disabled={fsTransferLoading === request.id}
+                                className="px-2 sm:px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400 flex items-center space-x-1"
+                              >
+                                {fsTransferLoading === request.id ? (
+                                  <>
+                                    <RefreshCw className="w-3 h-3 animate-spin" />
+                                    <span>Transferring...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <ExternalLink className="w-3 h-3" />
+                                    <span>Transfer in FS</span>
+                                  </>
+                                )}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setPendingTransferId(request.id);
+                                  setShowTransferConfirmation(true);
+                                }}
+                                className="px-2 sm:px-3 py-1 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition-colors"
+                              >
+                                Mark Completed
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
