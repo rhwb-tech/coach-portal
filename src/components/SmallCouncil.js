@@ -259,67 +259,97 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
         return;
       }
 
-      // Update runner_season_info table based on the selected program
-      if (!transferRequest.new_program || !transferRequest.runner_email_id || !currentSeason) {
-        console.error('Missing required data for runner update:', {
-          new_program: transferRequest.new_program,
-          runner_email_id: transferRequest.runner_email_id,
-          currentSeason: currentSeason
-        });
-        alert('Missing required data for runner update. Please check the transfer request details.');
-        return;
-      }
-
-      // Proceed with updating runner_season_info
-      let updateData = {};
-      
-      if (transferRequest.new_program === 'Lite') {
-        updateData = { coach: 'Lite' };
-      } else {
-        // For race distances (5K, 10K, Half Marathon, Full Marathon)
-        updateData = { race_distance: transferRequest.new_program };
-      }
-
-      // First, check if a record already exists
-      const { error: checkError } = await supabase
-        .from('runner_season_info')
-        .select('*')
-        .eq('season', currentSeason)
-        .eq('email_id', transferRequest.runner_email_id)
-        .single();
-
-      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows returned
-        console.error('Error checking existing record:', checkError);
-      }
-
-      // Update or insert record in runner_season_info
-      const upsertData = {
-        season: currentSeason,
-        email_id: transferRequest.runner_email_id,
-        ...updateData
-      };
-
-      const { error: runnerUpdateError } = await supabase
-        .from('runner_season_info')
-        .upsert(upsertData, {
-          onConflict: 'season,email_id'
-        });
-
-      if (runnerUpdateError) {
-        console.error('Error updating runner season info:', runnerUpdateError);
-        console.error('Error details:', {
-          message: runnerUpdateError.message,
-          code: runnerUpdateError.code,
-          details: runnerUpdateError.details,
-          hint: runnerUpdateError.hint
-        });
-        
-        if (runnerUpdateError.message?.includes('row-level security policy')) {
-          alert(`RLS Policy Error: ${runnerUpdateError.message}. Please ensure you have proper permissions.`);
-        } else {
-          alert(`Database Error: ${runnerUpdateError.message}`);
+      // Update runner_season_info table based on request type
+      if (transferRequest.action_type === 'Transfer Runner') {
+        // Transfer requests: update program/team
+        if (!transferRequest.new_program || !transferRequest.runner_email_id || !currentSeason) {
+          console.error('Missing required data for runner update:', {
+            new_program: transferRequest.new_program,
+            runner_email_id: transferRequest.runner_email_id,
+            currentSeason: currentSeason
+          });
+          alert('Missing required data for runner update. Please check the transfer request details.');
+          return;
         }
-        return; // Fail the operation if we can't update runner info
+
+        // Proceed with updating runner_season_info
+        let updateData = {};
+        
+        if (transferRequest.new_program === 'Lite') {
+          updateData = { coach: 'Lite' };
+        } else {
+          // For race distances (5K, 10K, Half Marathon, Full Marathon)
+          updateData = { race_distance: transferRequest.new_program };
+        }
+
+        // Update or insert record in runner_season_info
+        const upsertData = {
+          season: currentSeason,
+          email_id: transferRequest.runner_email_id,
+          ...updateData
+        };
+
+        const { error: runnerUpdateError } = await supabase
+          .from('runner_season_info')
+          .upsert(upsertData, {
+            onConflict: 'season,email_id'
+          });
+
+        if (runnerUpdateError) {
+          console.error('Error updating runner season info:', runnerUpdateError);
+          console.error('Error details:', {
+            message: runnerUpdateError.message,
+            code: runnerUpdateError.code,
+            details: runnerUpdateError.details,
+            hint: runnerUpdateError.hint
+          });
+          
+          if (runnerUpdateError.message?.includes('row-level security policy')) {
+            alert(`RLS Policy Error: ${runnerUpdateError.message}. Please ensure you have proper permissions.`);
+          } else {
+            alert(`Database Error: ${runnerUpdateError.message}`);
+          }
+          return; // Fail the operation if we can't update runner info
+        }
+      } else if (transferRequest.action_type === 'Defer Runner') {
+        // Deferral requests: set coach to 'ZZ. Exit'
+        if (!transferRequest.runner_email_id || !currentSeason) {
+          console.error('Missing required data for deferral update:', {
+            runner_email_id: transferRequest.runner_email_id,
+            currentSeason: currentSeason
+          });
+          alert('Missing required data for deferral update. Please try again.');
+          return;
+        }
+
+        const upsertData = {
+          season: currentSeason,
+          email_id: transferRequest.runner_email_id,
+          coach: 'ZZ. Exit'
+        };
+
+        const { error: deferralUpdateError } = await supabase
+          .from('runner_season_info')
+          .upsert(upsertData, {
+            onConflict: 'season,email_id'
+          });
+
+        if (deferralUpdateError) {
+          console.error('Error updating runner season info for deferral:', deferralUpdateError);
+          console.error('Error details:', {
+            message: deferralUpdateError.message,
+            code: deferralUpdateError.code,
+            details: deferralUpdateError.details,
+            hint: deferralUpdateError.hint
+          });
+          
+          if (deferralUpdateError.message?.includes('row-level security policy')) {
+            alert(`RLS Policy Error: ${deferralUpdateError.message}. Please ensure you have proper permissions.`);
+          } else {
+            alert(`Database Error: ${deferralUpdateError.message}`);
+          }
+          return; // Fail the operation if we can't update runner info
+        }
       }
 
             // Show success message
@@ -641,8 +671,38 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
                           {formatDate(request.created_at)}
                         </p>
                       </div>
-                      <div className="flex items-center justify-between sm:justify-end">
+                      <div className="flex items-center justify-between sm:justify-end space-x-2">
                         {getStatusBadge(request.status)}
+                        {request.status !== 'closed' && (
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleFinalSurgeTransfer(request)}
+                              disabled={fsTransferLoading === request.id}
+                              className="px-2 sm:px-3 py-1 bg-red-600 text-white text-xs rounded-lg hover:bg-red-700 transition-colors disabled:bg-red-400 flex items-center space-x-1"
+                            >
+                              {fsTransferLoading === request.id ? (
+                                <>
+                                  <RefreshCw className="w-3 h-3 animate-spin" />
+                                  <span>Removing...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <ExternalLink className="w-3 h-3" />
+                                  <span>Remove in FS</span>
+                                </>
+                              )}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setPendingTransferId(request.id);
+                                setShowTransferConfirmation(true);
+                              }}
+                              className="px-2 sm:px-3 py-1 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition-colors"
+                            >
+                              Mark Completed
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                     
@@ -670,13 +730,13 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
               <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
               </svg>
-              <h2 className="text-xl font-bold text-gray-900">Confirm Transfer</h2>
+              <h2 className="text-xl font-bold text-gray-900">Confirm Completion</h2>
             </div>
 
             {/* Content */}
             <div className="p-6">
               <p className="text-gray-700 mb-4">
-                Are you sure you want to transfer the runner? This action cannot be undone.
+                Are you sure this action is complete? This action cannot be undone.
               </p>
             </div>
 
@@ -701,7 +761,7 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
                 }}
                 className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
               >
-                Confirm Transfer
+                Confirm Completion
               </button>
             </div>
           </div>
