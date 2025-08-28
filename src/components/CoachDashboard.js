@@ -7,6 +7,7 @@ import RHWBConnect from './RHWBConnect';
 import KnowYourRunner from './KnowYourRunner';
 import SmallCouncil from './SmallCouncil';
 import UserGuide from './UserGuide';
+import CoachInsights from './CoachInsights/CoachInsights';
 
 const CoachDashboard = () => {
   const { user, isLoading, logout, isEmailSent } = useAuth();
@@ -61,7 +62,20 @@ const CoachDashboard = () => {
   
   // Helper function to check if user is admin (handles loading state)
   const isAdmin = () => {
-    return !isLoading && (user?.role === 'admin' || user?.role === 'Admin');
+    // During loading, check if we have cached role info to avoid flickering
+    if (isLoading) {
+      // Check sessionStorage for cached role during loading
+      try {
+        const sessionRole = sessionStorage.getItem('rhwb-session-user-role');
+        const overrideRole = sessionStorage.getItem('rhwb-override-user-role');
+        const cachedRole = overrideRole || sessionRole;
+        return cachedRole === 'admin' || cachedRole === 'Admin';
+      } catch (error) {
+        return false;
+      }
+    }
+    // Only return true if we have a user with admin role
+    return user?.role === 'admin' || user?.role === 'Admin';
   };
 
   // Helper function to update current view and persist it
@@ -72,7 +86,8 @@ const CoachDashboard = () => {
 
   // Redirect to default view if user doesn't have access to current view
   useEffect(() => {
-    if (currentView === 'small-council' && !isAdmin()) {
+    // Only redirect if not loading and user definitively doesn't have admin access
+    if (currentView === 'small-council' && !isLoading && !isAdmin()) {
       updateCurrentView('know-your-runner');
     }
   }, [currentView, user?.role, isLoading]);
@@ -944,6 +959,21 @@ const CoachDashboard = () => {
                 <span>Runner Metrics</span>
               </button>
               
+              <button
+                onClick={() => {
+                  updateCurrentView('coach-insights');
+                  setHamburgerMenuOpen(false);
+                }}
+                className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
+                  currentView === 'coach-insights' 
+                    ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <TrendingUp className="h-4 w-4" />
+                <span>Coach Insights</span>
+              </button>
+              
               {isAdmin() && (
                 <button
                   onClick={() => {
@@ -1127,6 +1157,21 @@ const CoachDashboard = () => {
             >
               <BarChart3 className="h-4 w-4" />
               <span>Runner Metrics</span>
+            </button>
+            
+            <button
+                          onClick={() => {
+              updateCurrentView('coach-insights');
+              setHamburgerMenuOpen(false);
+            }}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
+                currentView === 'coach-insights' 
+                  ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                  : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <TrendingUp className="h-4 w-4" />
+              <span>Coach Insights</span>
             </button>
             
             {isAdmin() && (
@@ -1439,6 +1484,8 @@ const CoachDashboard = () => {
       </div>
       ) : currentView === 'rhwb-connect' ? (
         <RHWBConnect />
+      ) : currentView === 'coach-insights' ? (
+        <CoachInsights />
       ) : currentView === 'small-council' ? (
         <SmallCouncil coachEmail={coachEmail} currentSeason={currentSeason} />
       ) : (
