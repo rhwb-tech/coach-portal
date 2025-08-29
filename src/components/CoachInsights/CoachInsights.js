@@ -11,8 +11,10 @@ const CoachInsights = () => {
   const { user } = useAuth();
   const [selectedSeason, setSelectedSeason] = useState(null);
   const [selectedCoach, setSelectedCoach] = useState(null);
+  const [selectedMeso, setSelectedMeso] = useState(null);
   const [seasons, setSeasons] = useState([]);
   const [availableCoaches, setAvailableCoaches] = useState([]);
+  const [availableMesos, setAvailableMesos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
@@ -38,7 +40,7 @@ const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase
     loadingData, 
     errorData,
     refreshData 
-  } = useInsightsData(coachEmail, selectedSeason, seasonNumber, selectedCoach, availableCoaches);
+  } = useInsightsData(coachEmail, selectedSeason, seasonNumber, selectedCoach, availableCoaches, selectedMeso);
 
   // Load available seasons
   useEffect(() => {
@@ -130,6 +132,52 @@ const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase
     loadCoaches();
   }, [isAdmin, selectedSeason, seasons]);
 
+  // Load available mesocycles based on selected season
+  useEffect(() => {
+    if (!seasonNumber || !coachEmail) {
+      setAvailableMesos([]);
+      setSelectedMeso(null);
+      return;
+    }
+
+    const loadMesos = async () => {
+      try {
+        
+        // Use the table name from other charts: rhwb_coach_input
+        const { data, error } = await supabase
+          .from('rhwb_coach_input')
+          .select('meso')
+          .eq('season', seasonNumber)
+          .eq('coach_email', coachEmail) // Filter by coach email like other queries
+          .not('meso', 'is', null)
+          .order('meso');
+
+
+        if (error) {
+          console.error('Error loading mesos:', error);
+          setAvailableMesos([]);
+          return;
+        }
+
+        // Get distinct meso values
+        const distinctMesos = [...new Set(data?.map(item => item.meso) || [])];
+        
+        setAvailableMesos(distinctMesos);
+        
+        // Auto-select first meso if available
+        if (distinctMesos.length > 0 && !selectedMeso) {
+          setSelectedMeso(distinctMesos[0]);
+        }
+
+      } catch (error) {
+        console.error('Error in loadMesos:', error);
+        setAvailableMesos([]);
+      }
+    };
+
+    loadMesos();
+  }, [seasonNumber, coachEmail]);
+
   // Show loading state
   if (loading) {
     return (
@@ -179,6 +227,9 @@ const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase
         availableCoaches={availableCoaches}
         selectedCoach={selectedCoach}
         onCoachChange={setSelectedCoach}
+        availableMesos={availableMesos}
+        selectedMeso={selectedMeso}
+        onMesoChange={setSelectedMeso}
         isAdmin={isAdmin}
         onRefresh={refreshData}
       />

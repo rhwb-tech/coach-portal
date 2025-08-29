@@ -5,7 +5,9 @@ export const CHART_TYPES = {
   PIE: 'pie',
   DOUGHNUT: 'doughnut',
   AREA: 'area',
-  SCATTER: 'scatter'
+  SCATTER: 'scatter',
+  BULLET_CHART: 'BULLET_CHART',
+  RUNNER_LIST: 'RUNNER_LIST'
 };
 
 // Default chart colors (RHWB brand colors)

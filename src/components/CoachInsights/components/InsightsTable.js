@@ -20,9 +20,38 @@ const InsightsTable = ({ tableData, loading, error }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
+  // Component for truncated text with hover tooltip
+  const TruncatedText = ({ text, maxWords = 5 }) => {
+    if (!text || typeof text !== 'string') return '-';
+    
+    const words = text.split(' ');
+    const isTruncated = words.length > maxWords;
+    const truncatedText = isTruncated ? words.slice(0, maxWords).join(' ') + '...' : text;
+
+    if (!isTruncated) {
+      return <span>{text}</span>;
+    }
+
+    return (
+      <div className="relative group">
+        <span className="cursor-help">{truncatedText}</span>
+        <div className="absolute z-50 invisible group-hover:visible bg-gray-900 text-white text-sm rounded-lg p-3 shadow-lg max-w-xs break-words -top-2 left-0 transform -translate-y-full">
+          <div className="whitespace-pre-wrap">{text}</div>
+          {/* Arrow pointing down */}
+          <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+        </div>
+      </div>
+    );
+  };
+
   // Format cell value based on column format
-  const formatCellValue = (value, format) => {
+  const formatCellValue = (value, format, columnKey) => {
     if (value === null || value === undefined) return '-';
+    
+    // Special handling for comment columns
+    if (columnKey === 'comments' || columnKey === 'rhwb_comments') {
+      return <TruncatedText text={value} maxWords={5} />;
+    }
     
     switch (format) {
       case 'percentage':
@@ -115,7 +144,13 @@ const InsightsTable = ({ tableData, loading, error }) => {
     
     const csvRows = processedData.map(row =>
       visibleColumns.map(col => {
-        const value = formatCellValue(row[col.key], col.format);
+        let value = row[col.key];
+        // For comment columns in CSV, use the full text, not the truncated component
+        if (col.key === 'comments' || col.key === 'rhwb_comments') {
+          value = value || '';
+        } else {
+          value = formatCellValue(row[col.key], col.format, col.key);
+        }
         // Escape commas and quotes in CSV
         return `"${String(value).replace(/"/g, '""')}"`;
       }).join(',')
@@ -293,7 +328,7 @@ const InsightsTable = ({ tableData, loading, error }) => {
                   <tr key={index} className="hover:bg-gray-50">
                     {visibleColumns.map((column) => (
                       <td key={column.key} className="px-4 py-3 text-sm text-gray-900">
-                        {formatCellValue(row[column.key], column.format)}
+                        {formatCellValue(row[column.key], column.format, column.key)}
                       </td>
                     ))}
                   </tr>

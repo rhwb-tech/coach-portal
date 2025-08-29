@@ -5,7 +5,7 @@ import insightsService from '../services/insightsService';
  * Custom hook for managing Coach Insights data
  * Handles loading states, error handling, and data caching
  */
-export const useInsightsData = (coachEmail, selectedSeason, seasonNumber = null, selectedCoach = null, availableCoaches = []) => {
+export const useInsightsData = (coachEmail, selectedSeason, seasonNumber = null, selectedCoach = null, availableCoaches = [], selectedMeso = null) => {
   const [chartData, setChartData] = useState({});
   const [tableData, setTableData] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
@@ -22,7 +22,7 @@ export const useInsightsData = (coachEmail, selectedSeason, seasonNumber = null,
       setLoadingData(true);
       setErrorData(null);
 
-      const data = await insightsService.fetchAllInsightsData(coachEmail, selectedSeason, seasonNumber, selectedCoach, availableCoaches);
+      const data = await insightsService.fetchAllInsightsData(coachEmail, selectedSeason, seasonNumber, selectedCoach, availableCoaches, selectedMeso);
       
       setChartData(data.charts || {});
       setTableData(data.table || []);
@@ -38,7 +38,7 @@ export const useInsightsData = (coachEmail, selectedSeason, seasonNumber = null,
     } finally {
       setLoadingData(false);
     }
-  }, [coachEmail, selectedSeason, seasonNumber, selectedCoach, availableCoaches]);
+  }, [coachEmail, selectedSeason, seasonNumber, selectedCoach, availableCoaches, selectedMeso]);
 
   // Refresh data function
   const refreshData = useCallback(async () => {
@@ -47,7 +47,7 @@ export const useInsightsData = (coachEmail, selectedSeason, seasonNumber = null,
       insightsService.clearCache(coachEmail, selectedSeason);
     }
     await fetchData();
-  }, [fetchData, coachEmail, selectedSeason, seasonNumber, selectedCoach, availableCoaches]);
+  }, [fetchData, coachEmail, selectedSeason, seasonNumber, selectedCoach, availableCoaches, selectedMeso]);
 
   // Fetch data when dependencies change
   useEffect(() => {

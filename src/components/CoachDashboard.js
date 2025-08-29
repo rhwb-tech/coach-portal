@@ -98,7 +98,6 @@ const CoachDashboard = () => {
       // When tab becomes visible, don't trigger any state changes
       // Just log for debugging
       if (!document.hidden) {
-        console.log('Tab became visible - maintaining current state');
       }
     };
 
@@ -459,7 +458,6 @@ const CoachDashboard = () => {
     // AND the page is visible (not in background tab)
     if (!isLoading && !coachEmail && !overrideEmail && !user && !isEmailSent && !document.hidden) {
       const redirectTimer = setTimeout(() => {
-        console.log('Redirecting to Wix website due to no authentication');
         window.location.href = 'https://www.rhwb.org/coach-portal';
       }, 5000); // 5 second delay to prevent redirects during tab switches
 

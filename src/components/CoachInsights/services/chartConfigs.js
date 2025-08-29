@@ -21,9 +21,9 @@ export const CHART_CONFIGS = {
     type: CHART_TYPES.BAR,
     sql: `
       select a.coach, initcap(full_name) as runner_name, cumulative_score 
-      from rhwb_meso_scores  a inner join rhwb_coaches b
+      from v_rhwb_meso_scores  a inner join rhwb_coaches b
             on a.coach = b.coach
-      where season = $1 and b.email_id =  $2 and category = 'Personal' 
+      where season = $1 and b.email_id =  $2 and meso = $3 and category = 'Personal' 
       order by cumulative_score desc
     `,
     dataTransform: (data) => ({
@@ -95,25 +95,6 @@ export const CHART_CONFIGS = {
       ORDER BY meso;
     `,
     dataTransform: (data) => {
-      console.log('🔍 MESOCYCLE_CHART_DEBUG - SQL Query:', `
-      SELECT 
-        meso,
-        COUNT(*) as athlete_count,
-        ROUND(AVG(
-          CASE 
-            WHEN meso_score_override IS NOT NULL THEN meso_score_override::decimal
-            ELSE meso_score
-          END
-        ), 2) as avg_score
-      FROM rhwb_coach_input rci
-      WHERE coach_email = $1 
-        AND season = $2
-        AND meso IS NOT NULL
-      GROUP BY meso
-      ORDER BY meso;
-    `);
-      console.log('🔍 MESOCYCLE_CHART_DEBUG - Parameters: [coachEmail, seasonName] (see insightsService logs for actual values)');
-      console.log('🔍 MESOCYCLE_CHART_DEBUG - Raw data received:', data);
       
       // Sort data by meso to ensure correct order (handling text values like "Meso 1", "Meso 2")
       const sortedData = [...data].sort((a, b) => {
@@ -123,7 +104,6 @@ export const CHART_CONFIGS = {
         return aNum - bNum;
       });
       
-      console.log('🔍 MESOCYCLE_CHART_DEBUG - Sorted data:', sortedData);
       
       const result = {
         labels: sortedData.map(row => row.meso),
@@ -147,7 +127,6 @@ export const CHART_CONFIGS = {
         ]
       };
       
-      console.log('🔍 MESOCYCLE_CHART_DEBUG - Final chart data:', result);
       
       return result;
     },
@@ -188,121 +167,68 @@ export const CHART_CONFIGS = {
     }
   },
 
-  distanceDistribution: {
-    id: 'distanceDistribution',
-    title: 'Race Distance Distribution',
-    description: 'Distribution of athletes by race distance',
-    type: CHART_TYPES.PIE,
+  feedbackRatio: {
+    id: 'feedbackRatio',
+    title: 'Feedback Ratio',
+    description: 'Coach feedback ratio compared to average and target',
+    type: 'BULLET_CHART',
     sql: `
-      SELECT 
-        race_distance,
-        COUNT(*) as athlete_count
-      FROM rhwb_coach_input rci
-      WHERE coach_email = $1 
-        AND season = $2
-        AND race_distance IS NOT NULL
-      GROUP BY race_distance
-      ORDER BY athlete_count DESC;
+      SELECT
+        season,
+        coach,
+        email_id AS coach_email,
+        meso,
+        (runs_with_comments::numeric
+          / NULLIF((runs_with_comments + runs_with_no_comments), 0)) * 100 AS feedback_ratio
+      FROM coach_metrics
+      WHERE season = $1 AND email_id = $2 AND meso = $3
     `,
-    dataTransform: (data) => ({
-      labels: data.map(row => row.race_distance),
-      datasets: [{
-        data: data.map(row => parseInt(row.athlete_count) || 0),
-        backgroundColor: COLOR_PALETTES.gradient,
-        borderWidth: 2,
-        borderColor: '#ffffff'
-      }]
-    }),
-    options: {
-      plugins: {
-        legend: {
-          position: 'right'
-        },
-        tooltip: {
-          callbacks: {
-            label: function(context) {
-              const total = context.dataset.data.reduce((a, b) => a + b, 0);
-              const percentage = ((context.parsed * 100) / total).toFixed(1);
-              return `${context.label}: ${context.parsed} (${percentage}%)`;
-            }
-          }
-        }
-      }
+    avgSql: `
+      SELECT
+        avg(runs_with_comments::numeric
+          / NULLIF((runs_with_comments + runs_with_no_comments), 0)) * 100  AS total_avg_feedback_ratio,
+        80::numeric AS target_ratio
+      FROM coach_metrics
+      WHERE season = $1 AND meso = $2
+    `,
+    dataTransform: (data, avgData) => {
+      
+      const coachData = data[0];
+      const averageData = avgData?.[0];
+      
+      const result = {
+        coachPercentage: parseFloat(coachData?.feedback_ratio || 0),
+        averagePercentage: parseFloat(averageData?.total_avg_feedback_ratio || 0),
+        target: parseFloat(averageData?.target_ratio || 80)
+      };
+      
+      
+      return result;
     },
     responsive: {
       aspectRatio: {
-        sm: 1,
-        md: 1.2,
-        lg: 1.5
+        sm: 1.2,
+        md: 1.5,
+        lg: 1.8
       }
     }
   },
 
-  strengthVsMileage: {
-    id: 'strengthVsMileage',
-    title: 'Strength vs Mileage Completion',
-    description: 'Comparison of strength training and mileage completion',
-    type: CHART_TYPES.BAR,
+  runnersLeftBehind: {
+    id: 'runnersLeftBehind',
+    title: 'Runners Left Behind',
+    description: 'Runners that did not receive adequate feedback',
+    type: 'RUNNER_LIST',
     sql: `
-      SELECT 
-        'Strength Training' as category,
-        ROUND(AVG(
-          CASE 
-            WHEN planned_strength_trains = 0 THEN 0
-            ELSE (completed_strength_trains * 100.0) / planned_strength_trains
-          END
-        ), 1) as completion_rate
-      FROM rhwb_coach_input
-      WHERE coach_email = $1 AND season = $2
-      
-      UNION ALL
-      
-      SELECT 
-        'Mileage' as category,
-        ROUND(AVG(
-          CASE 
-            WHEN planned_distance = 0 THEN 0
-            ELSE (completed_distance * 100.0) / planned_distance
-          END
-        ), 1) as completion_rate
-      FROM rhwb_coach_input
-      WHERE coach_email = $1 AND season = $2;
+      SELECT runner_name 
+      FROM coach_rlb 
+      WHERE season = $1 AND coach_email = $2 AND meso = $3
     `,
-    dataTransform: (data) => ({
-      labels: data.map(row => row.category),
-      datasets: [{
-        label: 'Completion Rate (%)',
-        data: data.map(row => parseFloat(row.completion_rate) || 0),
-        backgroundColor: [COLOR_PALETTES.performance[0], COLOR_PALETTES.performance[1]],
-        borderColor: [COLOR_PALETTES.performance[0], COLOR_PALETTES.performance[1]],
-        borderWidth: 1,
-        borderRadius: 4
-      }]
-    }),
-    options: {
-      scales: {
-        y: {
-          beginAtZero: true,
-          max: 100,
-          ticks: {
-            callback: function(value) {
-              return value + '%';
-            }
-          }
-        }
-      },
-      plugins: {
-        legend: {
-          display: false
-        },
-        tooltip: {
-          callbacks: {
-            label: function(context) {
-              return `${context.label}: ${context.parsed.y}%`;
-            }
-          }
-        }
-      }
+    dataTransform: (data) => {
+      return {
+        runners: data.map(row => row.runner_name),
+        count: data.length
+      };
     },
     responsive: {
       aspectRatio: {
@@ -316,48 +242,29 @@ export const CHART_CONFIGS = {
 
 // Default table configuration
 export const TABLE_CONFIG = {
-  id: 'athleteDetails',
-  title: 'Athlete Details',
-  description: 'Comprehensive athlete performance data',
+  id: 'runnerSurveyResults',
+  title: 'Runner Survey Results',
+  description: 'Survey responses and feedback from runners',
   sql: `
-    SELECT 
-      rci.runner_name,
-      rci.race_distance,
-      rci.meso,
-      rci.planned_strength_trains,
-      rci.completed_strength_trains,
-      rci.planned_distance,
-      rci.completed_distance,
-      ROUND(
-        CASE 
-          WHEN (rci.planned_strength_trains + rci.planned_distance) = 0 THEN 0
-          ELSE ((rci.completed_strength_trains + rci.completed_distance) * 100.0) / 
-               (rci.planned_strength_trains + rci.planned_distance)
-        END, 1
-      ) as completion_rate,
-      CASE 
-        WHEN rci.meso_score_override IS NOT NULL THEN rci.meso_score_override
-        ELSE rci.meso_score
-      END as final_score,
-      rci.meso_qual_score,
-      rci.season_phase
-    FROM rhwb_coach_input rci
-    WHERE rci.coach_email = $1 
-      AND rci.season = $2
-      AND rci.runner_name IS NOT NULL
-    ORDER BY completion_rate DESC, final_score DESC;
+    SELECT program, are_you_a_new_or_return_runner_to_rhwb, race_type,
+    feedback_quality, communication, relationship, recommendation, comments, rhwb_effectiveness, 
+    rhwb_knowledge_depth, rhwb_recommendation, rhwb_comments
+    FROM v_survey_results 
+    WHERE season = $1 AND coach_email = $2;
   `,
   columns: [
-    { key: 'runner_name', label: 'Athlete Name', sortable: true },
-    { key: 'race_distance', label: 'Distance', sortable: true },
-    { key: 'meso', label: 'Meso', sortable: true },
-    { key: 'planned_strength_trains', label: 'Strength Planned', sortable: true },
-    { key: 'completed_strength_trains', label: 'Strength Completed', sortable: true },
-    { key: 'planned_distance', label: 'Mileage Planned', sortable: true },
-    { key: 'completed_distance', label: 'Mileage Completed', sortable: true },
-    { key: 'completion_rate', label: 'Completion %', sortable: true, format: 'percentage' },
-    { key: 'final_score', label: 'Score', sortable: true, format: 'decimal' },
-    { key: 'season_phase', label: 'Phase', sortable: true }
+    { key: 'program', label: 'Program', sortable: true },
+    { key: 'are_you_a_new_or_return_runner_to_rhwb', label: 'New/Return Runner', sortable: true },
+    { key: 'race_type', label: 'Race Type', sortable: true },
+    { key: 'feedback_quality', label: 'Feedback Quality', sortable: true },
+    { key: 'communication', label: 'Communication', sortable: true },
+    { key: 'relationship', label: 'Relationship', sortable: true },
+    { key: 'recommendation', label: 'Recommendation', sortable: true },
+    { key: 'comments', label: 'Comments', sortable: false },
+    { key: 'rhwb_effectiveness', label: 'RHWB Effectiveness', sortable: true },
+    { key: 'rhwb_knowledge_depth', label: 'RHWB Knowledge Depth', sortable: true },
+    { key: 'rhwb_recommendation', label: 'RHWB Recommendation', sortable: true },
+    { key: 'rhwb_comments', label: 'RHWB Comments', sortable: false }
   ]
 };
 

@@ -70,7 +70,7 @@ export const getResponsiveAspectRatio = (config, screenWidth) => {
 };
 
 // Transform SQL results to chart data format
-export const transformDataForChart = (rawData, config) => {
+export const transformDataForChart = (rawData, config, avgData = null) => {
   try {
     if (!rawData || !Array.isArray(rawData) || rawData.length === 0) {
       return null;
@@ -78,7 +78,8 @@ export const transformDataForChart = (rawData, config) => {
 
     // Use the config's dataTransform function if available
     if (config.dataTransform && typeof config.dataTransform === 'function') {
-      return config.dataTransform(rawData);
+      // Pass avgData for charts that need it (like feedback ratio)
+      return config.dataTransform(rawData, avgData);
     }
 
     // Default transformation for simple cases

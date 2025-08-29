@@ -105,7 +105,6 @@ export const updateAthleteData = async (emailId, updateData, selectedMeso) => {
       throw new Error('Failed to update athlete data');
     }
 
-    console.log(`Updated athlete data for ${emailId} in mesocycle ${selectedMeso}`);
     return data;
     
   } catch (error) {

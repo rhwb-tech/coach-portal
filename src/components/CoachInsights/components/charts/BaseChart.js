@@ -15,6 +15,8 @@ import {
 import { Bar, Line, Pie, Doughnut } from 'react-chartjs-2';
 import { CHART_TYPES, DEFAULT_CHART_OPTIONS } from '../../utils/constants';
 import { AlertCircle, BarChart3, TrendingUp } from 'lucide-react';
+import BulletChart from './BulletChart';
+import RunnerList from './RunnerList';
 
 // Register Chart.js components
 ChartJS.register(
@@ -155,6 +157,10 @@ const BaseChart = ({
         return <Pie {...commonProps} />;
       case CHART_TYPES.DOUGHNUT:
         return <Doughnut {...commonProps} />;
+      case CHART_TYPES.BULLET_CHART:
+        return <BulletChart data={data} height={height} />;
+      case CHART_TYPES.RUNNER_LIST:
+        return <RunnerList data={data} height={height} />;
       default:
         return (
           <div className="flex items-center justify-center h-full">

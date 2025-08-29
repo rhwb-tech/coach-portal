@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronDown, RefreshCw, Calendar, BarChart3, User } from 'lucide-react';
+import { ChevronDown, RefreshCw, Calendar, BarChart3, User, Target } from 'lucide-react';
 
 const InsightsHeader = ({ 
   seasons, 
@@ -9,6 +9,9 @@ const InsightsHeader = ({
   availableCoaches = [],
   selectedCoach,
   onCoachChange,
+  availableMesos = [],
+  selectedMeso,
+  onMesoChange,
   isAdmin = typeof isAdmin === 'boolean' ? isAdmin : false,
   onRefresh 
 }) => {
@@ -80,6 +83,32 @@ const InsightsHeader = ({
                 <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               </div>
             </div>
+
+            {/* Mesocycle Selector */}
+            {availableMesos.length > 0 && (
+              <div className="relative">
+                <label htmlFor="meso-select" className="sr-only">
+                  Select Mesocycle
+                </label>
+                <div className="relative">
+                  <select
+                    id="meso-select"
+                    value={selectedMeso || ''}
+                    onChange={(e) => onMesoChange(e.target.value || null)}
+                    className="appearance-none bg-white border border-gray-300 rounded-lg pl-10 pr-8 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent min-w-[140px]"
+                  >
+                    <option value="">All Mesocycles</option>
+                    {availableMesos.map((meso) => (
+                      <option key={meso} value={meso}>
+                        {meso}
+                      </option>
+                    ))}
+                  </select>
+                  <Target className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                </div>
+              </div>
+            )}
 
             {/* Coach Selector - Admin Only */}
             {isAdmin && availableCoaches.length > 0 && (
