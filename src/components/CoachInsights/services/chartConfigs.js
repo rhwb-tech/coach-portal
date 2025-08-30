@@ -38,6 +38,10 @@ export const CHART_CONFIGS = {
       }]
     }),
     options: {
+      animation: {
+        duration: 500, // Faster animation (default is 1000ms)
+        easing: 'easeOutQuart'
+      },
       scales: {
         y: {
           beginAtZero: true,
@@ -57,7 +61,7 @@ export const CHART_CONFIGS = {
         tooltip: {
           callbacks: {
             label: function(context) {
-              return `${context.dataset.label}: ${context.parsed.y}%`;
+              return `${context.dataset.label}: ${context.parsed.y}`;
             }
           }
         }
@@ -131,6 +135,10 @@ export const CHART_CONFIGS = {
       return result;
     },
     options: {
+      animation: {
+        duration: 500, // Faster animation (default is 1000ms)
+        easing: 'easeOutQuart'
+      },
       scales: {
         y: {
           type: 'linear',
@@ -235,6 +243,168 @@ export const CHART_CONFIGS = {
         sm: 1.2,
         md: 1.5,
         lg: 1.8
+      }
+    }
+  },
+
+  commentCategories: {
+    id: 'commentCategories',
+    title: 'Comment Categories',
+    description: 'Distribution of coach feedback by category',
+    type: 'COMMENT_DONUT',
+    sql: `
+      SELECT 
+        category,
+        COUNT(*) as count,
+        ARRAY_AGG(comment_text ORDER BY comment_text) as comments
+      FROM v_comment_categories
+      WHERE season = $1 AND coach_email = $2 AND meso = $3 AND category IS NOT NULL
+      GROUP BY category
+      ORDER BY count DESC
+    `,
+    dataTransform: (data) => {
+      const total = data.reduce((sum, row) => sum + parseInt(row.count), 0);
+      
+      return {
+        labels: data.map(row => row.category),
+        datasets: [{
+          data: data.map(row => parseInt(row.count)),
+          backgroundColor: [
+            '#3B82F6', // Blue - Positive Feedback
+            '#10B981', // Green - Technical Feedback  
+            '#F59E0B', // Orange - Acknowledgement
+            '#8B5CF6', // Purple - General
+            '#EF4444'  // Red - Motivation & Encouragement
+          ],
+          borderWidth: 2,
+          borderColor: '#ffffff',
+          hoverBorderWidth: 3
+        }],
+        commentsData: data.reduce((acc, row) => {
+          acc[row.category] = row.comments || [];
+          return acc;
+        }, {}),
+        total
+      };
+    },
+    options: {
+      animation: {
+        duration: 300, // 2x faster (was 600ms)
+        easing: 'easeOutQuart'
+      },
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: {
+            padding: 20,
+            usePointStyle: true
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const total = context.dataset.data.reduce((a, b) => a + b, 0);
+              const percentage = ((context.parsed / total) * 100).toFixed(1);
+              return `${context.label}: ${context.parsed} (${percentage}%)`;
+            }
+          }
+        }
+      },
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '60%', // Makes it a donut chart
+      onClick: (event, elements) => {
+        // This will be handled by the component
+        return { event, elements };
+      }
+    },
+    responsive: {
+      aspectRatio: {
+        sm: 1,
+        md: 1.2,
+        lg: 1.5
+      }
+    }
+  },
+
+  pulseInteractions: {
+    id: 'pulseInteractions',
+    title: 'Pulse Interactions',
+    description: "Pulse interactions by the Coach's Cohorts compared to Average of all Coaches",
+    type: CHART_TYPES.BAR,
+    sql: `
+      SELECT season, coach, coach_email, interaction, interaction_count
+      FROM v_pulse_interactions
+      WHERE season = $1 AND coach_email = $2 AND interaction = 'Accessed'
+    `,
+    avgSql: `
+      SELECT AVG(interaction_count) as avg_accessed
+      FROM v_pulse_interactions
+      WHERE season = $1 AND interaction = 'Accessed'
+    `,
+    dataTransform: (data, avgData) => {
+      const coachAccessed = data.find(row => row.interaction === 'Accessed');
+      const averageAccessed = avgData?.[0];
+      
+      const coachCount = parseInt(coachAccessed?.interaction_count) || 0;
+      const avgCount = Math.round(parseFloat(averageAccessed?.avg_accessed) || 0);
+      const coachName = coachAccessed?.coach || 'Coach';
+
+      return {
+        labels: [`Coach ${coachName}`, 'All Coaches Average'],
+        datasets: [{
+          label: 'Accessed Interactions',
+          data: [coachCount, avgCount],
+          backgroundColor: [
+            '#3B82F6', // Blue - Coach
+            '#94A3B8'  // Gray - Average
+          ],
+          borderWidth: 1,
+          borderRadius: 4
+        }]
+      };
+    },
+    options: {
+      animation: false,
+      responsive: true,
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: 'Number of Accessed Interactions'
+          }
+        },
+        x: {
+          title: {
+            display: true,
+            text: 'Comparison'
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          display: false // Hide legend since we only have one dataset
+        },
+        tooltip: {
+          backgroundColor: '#1f2937',
+          titleColor: '#ffffff',
+          bodyColor: '#ffffff',
+          borderColor: '#374151',
+          borderWidth: 1,
+          callbacks: {
+            label: function(context) {
+              return `${context.label}: ${context.parsed.y}`;
+            }
+          }
+        }
+      }
+    },
+    responsive: {
+      aspectRatio: {
+        sm: 1,
+        md: 1.5,
+        lg: 2
       }
     }
   }

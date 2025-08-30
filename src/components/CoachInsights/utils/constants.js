@@ -7,7 +7,8 @@ export const CHART_TYPES = {
   AREA: 'area',
   SCATTER: 'scatter',
   BULLET_CHART: 'BULLET_CHART',
-  RUNNER_LIST: 'RUNNER_LIST'
+  RUNNER_LIST: 'RUNNER_LIST',
+  COMMENT_DONUT: 'COMMENT_DONUT'
 };
 
 // Default chart colors (RHWB brand colors)

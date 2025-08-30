@@ -119,16 +119,8 @@ const ChartsGrid = ({ chartData, loading, error }) => {
 
   return (
     <div className="space-y-6">
-      {/* Section Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">Analytics Dashboard</h2>
-          <p className="text-sm text-gray-600 mt-1">
-            Key performance metrics and trends
-          </p>
-        </div>
-        
-        {/* Status Summary */}
+      {/* Status Summary */}
+      <div className="flex items-center justify-end">
         <div className="flex items-center space-x-4 text-sm">
           {chartStats.success > 0 && (
             <div className="flex items-center space-x-1 text-green-600">

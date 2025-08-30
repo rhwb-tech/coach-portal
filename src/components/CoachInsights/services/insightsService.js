@@ -35,17 +35,18 @@ class InsightsService {
     try {
       // Execute the actual database query using Supabase
       if (sql.includes('cumulative_score') && sql.includes('v_rhwb_meso_scores')) {
-        const [seasonName, coachFilter, selectedMeso] = params;
+        const [seasonName, coachEmailId, selectedMeso] = params;
         
         
         try {
-          // Use direct query on v_rhwb_meso_scores table
+          // Use direct query on v_rhwb_meso_scores table 
+          // The view should already contain coach information
           let query = supabase
             .from('v_rhwb_meso_scores')
             .select('coach, full_name, cumulative_score')
             .eq('season', seasonName)
             .eq('category', 'Personal')
-            .ilike('coach', coachFilter);
+            .eq('coach_email', coachEmailId); // Assuming v_rhwb_meso_scores has coach_email column
           
           // Add meso filter only if selectedMeso is provided
           if (selectedMeso) {
@@ -53,6 +54,7 @@ class InsightsService {
           }
           
           const { data, error } = await query.order('cumulative_score', { ascending: false });
+
 
           if (error) {
             throw error;
@@ -68,18 +70,40 @@ class InsightsService {
           })) || [];
 
           return transformedData;
-        } catch (directError) {          
-          // Fallback: try RPC function if it exists
+        } catch (directError) {
+          // If coach_email column doesn't exist, try filtering by coach name instead
           try {
-            const { data, error } = await supabase.rpc('get_cumulative_scores_simple', {
-              season_name: seasonName,
-              coach_filter: coachFilter
-            });
+            let query = supabase
+              .from('v_rhwb_meso_scores')
+              .select('coach, full_name, cumulative_score')
+              .eq('season', seasonName)
+              .eq('category', 'Personal')
+              .ilike('coach', `%${coachEmailId.split('@')[0]}%`); // Use email username to match coach
+            
+            // Add meso filter only if selectedMeso is provided
+            if (selectedMeso) {
+              query = query.eq('meso', selectedMeso);
+            }
+            
+            const { data, error } = await query.order('cumulative_score', { ascending: false });
 
-            if (error) throw error;
-            return data || [];
-          } catch (rpcError) {
-            throw rpcError;
+            if (error) {
+              throw error;
+            }
+
+            // Transform the data to match expected structure (implement initcap)
+            const transformedData = data?.map(item => ({
+              coach: item.coach,
+              runner_name: item.full_name.split(' ').map(word => 
+                word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+              ).join(' '), // Implement initcap functionality
+              cumulative_score: item.cumulative_score
+            })) || [];
+
+            return transformedData;
+            
+          } catch (nameFilterError) {
+            throw nameFilterError;
           }
         }
       }
@@ -193,6 +217,108 @@ class InsightsService {
           }
           
           return data || [];
+          
+        } catch (queryError) {
+          throw queryError;
+        }
+      }
+
+      // Handle comment categories queries from v_comment_categories view
+      if (sql.includes('v_comment_categories')) {
+        
+        try {
+          const [seasonParam, coachEmailParam, mesoParam] = params;
+          
+          // Query comment categories view with all filters
+          let query = supabase
+            .from('v_comment_categories')
+            .select('category, comment_text')
+            .eq('season', seasonParam)
+            .eq('coach_email', coachEmailParam)
+            .not('category', 'is', null);
+            
+          // Add meso filter if provided
+          if (mesoParam) {
+            query = query.eq('meso', mesoParam);
+          }
+          
+          const { data, error } = await query;
+          
+          if (error) {
+            throw error;
+          }
+          
+          // Group comments by category and count them
+          const categoryData = {};
+          data.forEach(row => {
+            if (!categoryData[row.category]) {
+              categoryData[row.category] = {
+                category: row.category,
+                count: 0,
+                comments: []
+              };
+            }
+            categoryData[row.category].count += 1;
+            categoryData[row.category].comments.push(row.comment_text);
+          });
+          
+          // Convert to array format expected by chart
+          const result = Object.values(categoryData).map(item => ({
+            category: item.category,
+            count: item.count,
+            comments: item.comments
+          }));
+          
+          
+          return result;
+          
+        } catch (queryError) {
+          throw queryError;
+        }
+      }
+
+      // Handle pulse interactions queries
+      if (sql.includes('v_pulse_interactions')) {
+        
+        try {
+          // Check if this is the average query or main query
+          if (sql.includes('AVG(interaction_count)')) {
+            // Average query: only season parameter
+            const [seasonParam] = params;
+            
+            const { data, error } = await supabase
+              .from('v_pulse_interactions')
+              .select('interaction_count')
+              .eq('season', seasonParam)
+              .eq('interaction', 'Accessed');
+            
+            if (error) {
+              throw error;
+            }
+            
+            // Calculate average manually
+            const counts = data.map(row => parseInt(row.interaction_count) || 0);
+            const average = counts.length > 0 ? counts.reduce((a, b) => a + b, 0) / counts.length : 0;
+            
+            return [{ avg_accessed: average }];
+            
+          } else {
+            // Main query: season and coach email parameters
+            const [seasonParam, coachEmailParam] = params;
+            
+            const { data, error } = await supabase
+              .from('v_pulse_interactions')
+              .select('season, coach, coach_email, interaction, interaction_count')
+              .eq('season', seasonParam)
+              .eq('coach_email', coachEmailParam)
+              .eq('interaction', 'Accessed');
+            
+            if (error) {
+              throw error;
+            }
+            
+            return data || [];
+          }
           
         } catch (queryError) {
           throw queryError;
@@ -463,23 +589,16 @@ class InsightsService {
         // Use seasonNumber as-is since it comes from the database already formatted
         let seasonName = seasonNumber;
         
-        // Extract coach name from selectedCoach or use coachEmail
-        let coachFilter = '%'; // default wildcard
+        // Use coach email ID directly since SQL expects b.email_id = $2
+        let coachEmailId = coachEmail; // default to current coach email
         if (selectedCoach && availableCoaches.length > 0) {
-          // Find the coach name from availableCoaches using the selectedCoach email
-          const selectedCoachData = availableCoaches.find(c => c.coach_email_id === selectedCoach);
-          if (selectedCoachData && selectedCoachData.coach) {
-            coachFilter = `%${selectedCoachData.coach}%`;
-          } else {
-            // Fallback: extract username from email
-            coachFilter = `%${selectedCoach.split('@')[0]}%`;
-          }
-        } else if (coachEmail) {
-          coachFilter = `%${coachEmail.split('@')[0]}%`; // Use current coach email
+          // selectedCoach is the coach_email_id from the dropdown
+          coachEmailId = selectedCoach;
         }
         
         // Include meso parameter for athleteCompletion chart
-        params = [seasonName, coachFilter, selectedMeso];
+        params = [seasonName, coachEmailId, selectedMeso];
+        
       } else if (config.id === 'mesocycleProgress') {
         // Use seasonNumber as-is since it comes from the database already formatted
         let seasonName = seasonNumber;
@@ -492,6 +611,14 @@ class InsightsService {
         // Runners left behind needs season number, coach email, and meso
         let seasonName = seasonNumber || seasonId;
         params = [seasonName, coachEmail, selectedMeso];
+      } else if (config.id === 'commentCategories') {
+        // Comment categories needs season, coach email, and meso
+        let seasonName = seasonNumber || seasonId;
+        params = [seasonName, coachEmail, selectedMeso];
+      } else if (config.id === 'pulseInteractions') {
+        // Pulse interactions needs season and coach email
+        let seasonName = seasonNumber || seasonId;
+        params = [seasonName, coachEmail];
       } else {
         // Legacy format for other queries  
         params = [coachEmail, seasonId];
@@ -504,7 +631,7 @@ class InsightsService {
         params.push(selectedMeso);
       }
 
-      // Execute the SQL query (handle special case for feedback ratio with dual queries)
+      // Execute the SQL query (handle special cases with dual queries)
       let rawData, avgData = null;
       
       if (config.id === 'feedbackRatio' && config.avgSql) {
@@ -513,6 +640,13 @@ class InsightsService {
         // For average query, only use season and meso (remove coach email)
         // params structure: [seasonName, coachEmail, selectedMeso]
         const avgParams = [params[0], params[2]]; // season, meso
+        avgData = await this.executeQuery(config.avgSql, avgParams);
+      } else if (config.id === 'pulseInteractions' && config.avgSql) {
+        // Pulse interactions needs both main query and average query
+        rawData = await this.executeQuery(config.sql, params);
+        // For average query, only use season (remove coach email)
+        // params structure: [seasonName, coachEmail]
+        const avgParams = [params[0]]; // season only
         avgData = await this.executeQuery(config.avgSql, avgParams);
       } else {
         rawData = await this.executeQuery(config.sql, params);

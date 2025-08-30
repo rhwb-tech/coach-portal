@@ -17,6 +17,7 @@ import { CHART_TYPES, DEFAULT_CHART_OPTIONS } from '../../utils/constants';
 import { AlertCircle, BarChart3, TrendingUp } from 'lucide-react';
 import BulletChart from './BulletChart';
 import RunnerList from './RunnerList';
+import CommentDonut from './CommentDonut';
 
 // Register Chart.js components
 ChartJS.register(
@@ -161,6 +162,8 @@ const BaseChart = ({
         return <BulletChart data={data} height={height} />;
       case CHART_TYPES.RUNNER_LIST:
         return <RunnerList data={data} height={height} />;
+      case CHART_TYPES.COMMENT_DONUT:
+        return <CommentDonut data={data} height={height} />;
       default:
         return (
           <div className="flex items-center justify-center h-full">

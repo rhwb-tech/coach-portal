@@ -50,15 +50,7 @@ const InsightsHeader = ({
           {/* Controls */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
             {/* Coach Info */}
-            {coachEmail && (
-              <div className="flex items-center space-x-2 px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-600">
-                <User className="h-4 w-4" />
-                <span className="truncate max-w-xs">
-                  {coachEmail}
-                </span>
-              </div>
-            )}
-
+            
             {/* Season Selector */}
             <div className="relative">
               <label htmlFor="season-select" className="sr-only">
@@ -74,7 +66,7 @@ const InsightsHeader = ({
                   <option value="" disabled>Select Season</option>
                   {seasons.map((season) => (
                     <option key={season.id} value={season.id}>
-                      Season {season.season}
+                       {season.season}
                       {season.current && ' (Current)'}
                     </option>
                   ))}
@@ -126,7 +118,7 @@ const InsightsHeader = ({
                     <option value="" disabled>Select Coach</option>
                     {availableCoaches.map((coach) => (
                       <option key={coach.coach_email_id} value={coach.coach_email_id}>
-                        {coach.coach} ({coach.coach_email_id})
+                        {coach.coach} 
                       </option>
                     ))}
                   </select>
@@ -148,37 +140,7 @@ const InsightsHeader = ({
           </div>
         </div>
 
-        {/* Season & Coach Info Banner */}
-        {currentSeason && (
-          <div className="pb-4 space-y-2">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 flex items-center space-x-2">
-              <Calendar className="h-4 w-4 text-blue-600" />
-              <span className="text-sm text-blue-800">
-                Viewing data for <strong>Season {currentSeason.season}</strong>
-                {currentSeason.current && (
-                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                    Current
-                  </span>
-                )}
-              </span>
-            </div>
-            
-            {/* Coach Info Banner */}
-            {coachEmail && (
-              <div className="bg-purple-50 border border-purple-200 rounded-lg px-4 py-2 flex items-center space-x-2">
-                <User className="h-4 w-4 text-purple-600" />
-                <span className="text-sm text-purple-800">
-                  Coach: <strong>{coachEmail}</strong>
-                  {isAdmin && selectedCoach && (
-                    <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                      Admin View
-                    </span>
-                  )}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
+        
       </div>
     </div>
   );
