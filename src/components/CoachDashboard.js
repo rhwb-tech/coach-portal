@@ -3,6 +3,7 @@ import { Search, Info, Save, TrendingUp, ChevronDown, Menu, X, MessageSquare, Bo
 import { fetchCoachData, updateAthleteData, calculateCompletionRate, getAvatarInitials } from '../services/coachService';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../services/supabaseClient';
+import { navigationLogger } from '../services/navigationLogger';
 import RHWBConnect from './RHWBConnect';
 import KnowYourRunner from './KnowYourRunner';
 import SmallCouncil from './SmallCouncil';
@@ -79,9 +80,15 @@ const CoachDashboard = () => {
   };
 
   // Helper function to update current view and persist it
-  const updateCurrentView = (newView) => {
+  const updateCurrentView = async (newView) => {
     setCurrentView(newView);
     localStorage.setItem('rhwb-coach-portal-current-view', newView);
+    
+    // Log navigation event
+    if (coachEmail) {
+      const menuDisplayName = navigationLogger.getMenuDisplayName(newView);
+      await navigationLogger.logNavigation(coachEmail, menuDisplayName);
+    }
   };
 
   // Redirect to default view if user doesn't have access to current view

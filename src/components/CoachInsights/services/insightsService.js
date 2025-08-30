@@ -758,6 +758,7 @@ class InsightsService {
     }
   }
 
+
   /**
    * Clear cache for specific coach/season
    */
