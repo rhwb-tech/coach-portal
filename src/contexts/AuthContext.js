@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabaseClient';
+import { navigationLogger } from '../services/navigationLogger';
 
 const AuthContext = createContext();
 
@@ -391,6 +392,8 @@ export const AuthProvider = ({ children }) => {
               // Only update user state if there's an actual change
               if (isUserChanged(user, authUser)) {
                 setUser(authUser);
+                // Log user sign-in
+                await navigationLogger.logNavigation(authUser.email, 'User Signed In');
               }
             } else {
               // User is authenticated but not authorized - log them out
@@ -453,6 +456,8 @@ export const AuthProvider = ({ children }) => {
             // Only update user state if there's an actual change
             if (isUserChanged(user, authUser)) {
               setUser(authUser);
+              // Log user sign-in
+              await navigationLogger.logNavigation(authUser.email, 'User Signed In');
             }
             setIsLoading(false);
             setAuthError(null);
@@ -492,6 +497,8 @@ export const AuthProvider = ({ children }) => {
             // Only update user state if there's an actual change
             if (isUserChanged(user, authUser)) {
               setUser(authUser);
+              // Log user sign-in
+              await navigationLogger.logNavigation(authUser.email, 'User Signed In');
               // Clear email sent state when user is successfully authenticated
               setIsEmailSent(false);
             }
@@ -545,6 +552,8 @@ export const AuthProvider = ({ children }) => {
           id: 'session-user'
         };
         setUser(authUser);
+        // Log user sign-in
+        await navigationLogger.logNavigation(authUser.email, 'User Signed In');
         setIsEmailSent(false);
         setIsLoading(false);
         return { success: true, fromSession: true };

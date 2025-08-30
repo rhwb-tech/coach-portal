@@ -39,8 +39,8 @@ class NavigationLogger {
   getMenuDisplayName(viewKey) {
     const menuMap = {
       'know-your-runner': 'Know Your Runner',
-      'rhwb-connect': 'RHWB Connect',
-      'dashboard': 'RHWB Connect',
+      'rhwb-connect': 'OneRHWB',
+      'dashboard': 'Runner Metrics',
       'small-council': 'OneRHWB', 
       'coach-insights': 'Coach Insights',
       'user-guide': 'User Guide'
