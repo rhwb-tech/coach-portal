@@ -163,21 +163,26 @@ const CoachDashboard = () => {
       
       try {
         const { data: coachData, error: coachError } = await supabase
-          .from('rhwb_coaches')
-          .select('coach')
-          .eq('email_id', coachEmail)
+          .from('v_rhwb_roles')
+          .select('full_name')
+          .eq('email_id', coachEmail.toLowerCase())
           .single();
         
         if (!coachError && coachData) {
-          setCoachName(coachData.coach);
+          setCoachName(coachData.full_name);
+        } else {
+          // Fallback to user name if v_rhwb_roles query fails
+          setCoachName(user?.name || 'Unknown');
         }
       } catch (error) {
         console.error('Failed to fetch coach name:', error);
+        // Fallback to user name if query fails
+        setCoachName(user?.name || 'Unknown');
       }
     };
 
     loadCoachName();
-  }, [coachEmail]);
+  }, [coachEmail, user?.name]);
 
   // Load cohort data when switching to Know Your Runner view
   useEffect(() => {
@@ -206,11 +211,11 @@ const CoachDashboard = () => {
         const currentSeasonValue = seasonData.season;
         setCurrentSeason(currentSeasonValue);
         
-        // Query 2: Get coach name from rhwb_coaches table
+        // Query 2: Get coach name from v_rhwb_roles view
         const { data: coachData, error: coachError } = await supabase
-          .from('rhwb_coaches')
-          .select('coach')
-          .eq('email_id', coachEmail)
+          .from('v_rhwb_roles')
+          .select('full_name')
+          .eq('email_id', coachEmail.toLowerCase())
           .single();
         
         if (coachError || !coachData) {
@@ -219,7 +224,7 @@ const CoachDashboard = () => {
           return;
         }
         
-        const coachNameValue = coachData.coach;
+        const coachNameValue = coachData.full_name;
         
         // Query 3: Get the season info for the coach using current season
         const { data: runnerSeasonData, error: runnerSeasonError } = await supabase
@@ -330,11 +335,11 @@ const CoachDashboard = () => {
             const currentSeasonValue = seasonData.season;
             setCurrentSeason(currentSeasonValue);
             
-            // Query 2: Get coach name from rhwb_coaches table
+            // Query 2: Get coach name from v_rhwb_roles view
             const { data: coachData, error: coachError } = await supabase
-              .from('rhwb_coaches')
-              .select('coach')
-              .eq('email_id', coachEmail)
+              .from('v_rhwb_roles')
+              .select('full_name')
+              .eq('email_id', coachEmail.toLowerCase())
               .single();
             
             if (coachError || !coachData) {
@@ -342,7 +347,7 @@ const CoachDashboard = () => {
               return;
             }
             
-            const coachNameValue = coachData.coach;
+            const coachNameValue = coachData.full_name;
             
             // Query 3: Get the season info for the coach using current season
             const { data: runnerSeasonData, error: runnerSeasonError } = await supabase

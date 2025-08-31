@@ -30,16 +30,21 @@ const RunnerCoachNotes = ({ runner }) => {
       
       try {
         const { data: coachData, error: coachError } = await supabase
-          .from('rhwb_coaches')
-          .select('coach')
-          .ilike('email_id', coachEmail)
+          .from('v_rhwb_roles')
+          .select('full_name')
+          .eq('email_id', coachEmail.toLowerCase())
           .single();
         
         if (!coachError && coachData) {
-          setCoachName(coachData.coach);
+          setCoachName(coachData.full_name);
+        } else {
+          // Fallback to email if v_rhwb_roles query fails
+          setCoachName(coachEmail);
         }
       } catch (error) {
         console.error('Failed to fetch coach name:', error);
+        // Fallback to email if query fails
+        setCoachName(coachEmail);
       }
     };
 

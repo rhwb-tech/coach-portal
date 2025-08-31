@@ -1,25 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { getAllChartConfigs } from '../services/chartConfigs';
 import BaseChart from './charts/BaseChart';
 import { getScreenSize, debounce } from '../utils/chartHelpers';
 import { AlertCircle, BarChart3 } from 'lucide-react';
 
-const ChartsGrid = ({ chartData, loading, error }) => {
+const ChartsGrid = React.memo(({ chartData, loading, error }) => {
   const [screenSize, setScreenSize] = useState(getScreenSize());
   const [chartConfigs] = useState(getAllChartConfigs());
 
-  // Handle window resize
-  useEffect(() => {
-    const handleResize = debounce(() => {
-      setScreenSize(getScreenSize());
-    }, 250);
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // Get responsive grid classes based on screen size
-  const getGridClasses = () => {
+  // Get responsive grid classes based on screen size - memoized
+  const gridClasses = useMemo(() => {
     const baseClasses = 'grid gap-6';
     
     switch (screenSize) {
@@ -34,10 +24,10 @@ const ChartsGrid = ({ chartData, loading, error }) => {
       default:
         return `${baseClasses} grid-cols-1 md:grid-cols-2`;
     }
-  };
+  }, [screenSize]);
 
-  // Get responsive chart height based on screen size
-  const getChartHeight = () => {
+  // Get responsive chart height based on screen size - memoized
+  const chartHeight = useMemo(() => {
     switch (screenSize) {
       case 'xs':
       case 'sm':
@@ -50,7 +40,42 @@ const ChartsGrid = ({ chartData, loading, error }) => {
       default:
         return 350;
     }
-  };
+  }, [screenSize]);
+
+  // Count successful vs error charts - memoized to prevent recalculation
+  const chartStats = useMemo(() => {
+    return chartConfigs.reduce((acc, config) => {
+      const chart = chartData[config.id];
+      if (chart?.error) {
+        acc.errors++;
+      } else if (chart?.data) {
+        acc.success++;
+      } else {
+        acc.empty++;
+      }
+      acc.total++;
+      return acc;
+    }, { total: 0, success: 0, errors: 0, empty: 0 });
+  }, [chartConfigs, chartData]);
+
+  // Handle window resize with throttling
+  useEffect(() => {
+    let timeoutId;
+    const handleResize = () => {
+      if (timeoutId) return; // Throttle to prevent excessive updates
+      
+      timeoutId = setTimeout(() => {
+        setScreenSize(getScreenSize());
+        timeoutId = null;
+      }, 100);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, []);
 
   // Show global loading state
   if (loading) {
@@ -64,7 +89,7 @@ const ChartsGrid = ({ chartData, loading, error }) => {
           </div>
         </div>
         
-        <div className={getGridClasses()}>
+        <div className={gridClasses}>
           {chartConfigs.map((config) => (
             <BaseChart
               key={config.id}
@@ -72,7 +97,7 @@ const ChartsGrid = ({ chartData, loading, error }) => {
               data={null}
               loading={true}
               error={null}
-              height={getChartHeight()}
+              height={chartHeight}
             />
           ))}
         </div>
@@ -103,20 +128,6 @@ const ChartsGrid = ({ chartData, loading, error }) => {
     );
   }
 
-  // Count successful vs error charts
-  const chartStats = chartConfigs.reduce((acc, config) => {
-    const chart = chartData[config.id];
-    if (chart?.error) {
-      acc.errors++;
-    } else if (chart?.data) {
-      acc.success++;
-    } else {
-      acc.empty++;
-    }
-    acc.total++;
-    return acc;
-  }, { total: 0, success: 0, errors: 0, empty: 0 });
-
   return (
     <div className="space-y-6">
       {/* Status Summary */}
@@ -144,19 +155,20 @@ const ChartsGrid = ({ chartData, loading, error }) => {
       </div>
 
       {/* Charts Grid */}
-      <div className={getGridClasses()}>
+      <div className={gridClasses}>
         {chartConfigs.map((config) => {
           const chart = chartData[config.id] || {};
+          const chartKey = `${config.id}_${chart.data ? 'data' : 'no-data'}_${chart.error ? 'error' : 'no-error'}`;
           
           return (
             <BaseChart
-              key={config.id}
+              key={chartKey}
               config={config}
               data={chart.data || null}
               loading={false}
               error={chart.error || null}
-              height={getChartHeight()}
-              className="transition-all duration-200 hover:scale-[1.02]"
+              height={chartHeight}
+              className="transition-all duration-200 hover:scale-[1.01]"
             />
           );
         })}
@@ -191,6 +203,7 @@ const ChartsGrid = ({ chartData, loading, error }) => {
       )}
     </div>
   );
-};
+});
 
+ChartsGrid.displayName = 'ChartsGrid';
 export default ChartsGrid;

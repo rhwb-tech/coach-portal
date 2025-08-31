@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import insightsService from '../services/insightsService';
 
 /**
@@ -11,18 +11,44 @@ export const useInsightsData = (coachEmail, selectedSeason, seasonNumber = null,
   const [loadingData, setLoadingData] = useState(true);
   const [errorData, setErrorData] = useState(null);
   
+  // Stabilize the dependencies to prevent infinite re-renders
+  const stableParams = useMemo(() => ({
+    coachEmail,
+    selectedSeason,
+    seasonNumber,
+    selectedCoach,
+    availableCoaches: availableCoaches?.length || 0, // Use length instead of JSON.stringify
+    selectedMeso
+  }), [coachEmail, selectedSeason, seasonNumber, selectedCoach, availableCoaches?.length, selectedMeso]);
+
+  // Add a ref to track if we're currently fetching to prevent duplicate requests
+  const isFetchingRef = useRef(false);
+  
   // Fetch all insights data
   const fetchData = useCallback(async () => {
-    if (!coachEmail || !selectedSeason) {
+    if (!stableParams.coachEmail || !stableParams.selectedSeason) {
       setLoadingData(false);
       return;
     }
 
+    // Prevent duplicate requests
+    if (isFetchingRef.current) {
+      return;
+    }
+
     try {
+      isFetchingRef.current = true;
       setLoadingData(true);
       setErrorData(null);
 
-      const data = await insightsService.fetchAllInsightsData(coachEmail, selectedSeason, seasonNumber, selectedCoach, availableCoaches, selectedMeso);
+      const data = await insightsService.fetchAllInsightsData(
+        stableParams.coachEmail, 
+        stableParams.selectedSeason, 
+        stableParams.seasonNumber, 
+        stableParams.selectedCoach, 
+        stableParams.availableCoaches, 
+        stableParams.selectedMeso
+      );
       
       setChartData(data.charts || {});
       setTableData(data.table || []);
@@ -37,21 +63,28 @@ export const useInsightsData = (coachEmail, selectedSeason, seasonNumber = null,
 
     } finally {
       setLoadingData(false);
+      isFetchingRef.current = false;
     }
-  }, [coachEmail, selectedSeason, seasonNumber, selectedCoach, availableCoaches, selectedMeso]);
+  }, [stableParams]);
 
-  // Refresh data function
+  // Refresh data function  
   const refreshData = useCallback(async () => {
     // Clear cache for this coach/season
-    if (coachEmail && selectedSeason) {
-      insightsService.clearCache(coachEmail, selectedSeason);
+    if (stableParams.coachEmail && stableParams.selectedSeason) {
+      insightsService.clearCache(stableParams.coachEmail, stableParams.selectedSeason);
     }
     await fetchData();
-  }, [fetchData, coachEmail, selectedSeason, seasonNumber, selectedCoach, availableCoaches, selectedMeso]);
+  }, [fetchData, stableParams.coachEmail, stableParams.selectedSeason]);
 
   // Fetch data when dependencies change
   useEffect(() => {
     fetchData();
+    
+    // Cleanup function to cancel requests when component unmounts
+    return () => {
+      insightsService.cancelAllRequests();
+      isFetchingRef.current = false;
+    };
   }, [fetchData]);
 
   // Provide individual chart data accessors

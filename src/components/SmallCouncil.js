@@ -194,9 +194,9 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
   const getCoachName = async (emailId) => {
     try {
       const { data, error } = await supabase
-        .from('rhwb_coaches')
-        .select('coach')
-        .eq('email_id', emailId)
+        .from('v_rhwb_roles')
+        .select('full_name')
+        .eq('email_id', emailId.toLowerCase())
         .single();
 
       if (error) {
@@ -204,7 +204,7 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
         return emailId; // Fallback to email if coach name not found
       }
 
-      return data?.coach || emailId;
+      return data?.full_name || emailId;
     } catch (error) {
       console.error('Error fetching coach name:', error);
       return emailId;

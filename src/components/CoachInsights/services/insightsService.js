@@ -10,7 +10,9 @@ import { transformDataForChart } from '../utils/chartHelpers';
 class InsightsService {
   constructor() {
     this.cache = new Map();
-    this.cacheDuration = 5 * 60 * 1000; // 5 minutes cache
+    this.cacheDuration = 2 * 60 * 1000; // Reduced to 2 minutes cache
+    this.pendingRequests = new Map(); // Track pending requests for cancellation
+    this.debounceTimers = new Map(); // Track debounce timers
   }
 
   /**
@@ -563,6 +565,42 @@ class InsightsService {
   }
 
   /**
+   * Debounced query execution to prevent excessive API calls
+   */
+  async executeQueryWithDebounce(sql, params = [], debounceMs = 500) {
+    const queryKey = `${sql}_${JSON.stringify(params)}`;
+    
+    // Clear existing timer
+    if (this.debounceTimers.has(queryKey)) {
+      clearTimeout(this.debounceTimers.get(queryKey));
+    }
+    
+    // Cancel pending request if exists
+    if (this.pendingRequests.has(queryKey)) {
+      this.pendingRequests.get(queryKey).abort();
+      this.pendingRequests.delete(queryKey);
+    }
+    
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(async () => {
+        try {
+          const abortController = new AbortController();
+          this.pendingRequests.set(queryKey, abortController);
+          
+          const result = await this.executeQuery(sql, params);
+          this.pendingRequests.delete(queryKey);
+          resolve(result);
+        } catch (error) {
+          this.pendingRequests.delete(queryKey);
+          reject(error);
+        }
+      }, debounceMs);
+      
+      this.debounceTimers.set(queryKey, timer);
+    });
+  }
+
+  /**
    * Fetch data for a specific chart
    */
   async fetchChartData(chartId, coachEmail, seasonId, seasonNumber = null, selectedCoach = null, availableCoaches = [], selectedMeso = null) {
@@ -636,20 +674,20 @@ class InsightsService {
       
       if (config.id === 'feedbackRatio' && config.avgSql) {
         // Feedback ratio needs both main query and average query
-        rawData = await this.executeQuery(config.sql, params);
+        rawData = await this.executeQueryWithDebounce(config.sql, params);
         // For average query, only use season and meso (remove coach email)
         // params structure: [seasonName, coachEmail, selectedMeso]
         const avgParams = [params[0], params[2]]; // season, meso
-        avgData = await this.executeQuery(config.avgSql, avgParams);
+        avgData = await this.executeQueryWithDebounce(config.avgSql, avgParams);
       } else if (config.id === 'pulseInteractions' && config.avgSql) {
         // Pulse interactions needs both main query and average query
-        rawData = await this.executeQuery(config.sql, params);
+        rawData = await this.executeQueryWithDebounce(config.sql, params);
         // For average query, only use season (remove coach email)
         // params structure: [seasonName, coachEmail]
         const avgParams = [params[0]]; // season only
-        avgData = await this.executeQuery(config.avgSql, avgParams);
+        avgData = await this.executeQueryWithDebounce(config.avgSql, avgParams);
       } else {
-        rawData = await this.executeQuery(config.sql, params);
+        rawData = await this.executeQueryWithDebounce(config.sql, params);
       }
 
       // Transform data using config's transform function
@@ -722,7 +760,7 @@ class InsightsService {
       
       // Execute the SQL query with corrected parameter order for v_survey_results
       // SQL expects: season = $1 and coach_email = $2
-      const rawData = await this.executeQuery(tableConfig.sql, [seasonParam, coachEmail]);
+      const rawData = await this.executeQueryWithDebounce(tableConfig.sql, [seasonParam, coachEmail]);
 
       // Cache the result
       this.cache.set(cacheKey, {
@@ -779,6 +817,23 @@ class InsightsService {
    */
   clearAllCache() {
     this.cache.clear();
+  }
+
+  /**
+   * Cancel all pending requests and clear timers
+   */
+  cancelAllRequests() {
+    // Cancel all pending requests
+    for (const [key, controller] of this.pendingRequests) {
+      controller.abort();
+    }
+    this.pendingRequests.clear();
+    
+    // Clear all debounce timers
+    for (const [key, timer] of this.debounceTimers) {
+      clearTimeout(timer);
+    }
+    this.debounceTimers.clear();
   }
 
   /**

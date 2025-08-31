@@ -19,7 +19,7 @@ import BulletChart from './BulletChart';
 import RunnerList from './RunnerList';
 import CommentDonut from './CommentDonut';
 
-// Register Chart.js components
+// Register Chart.js components ONCE outside the component
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -33,7 +33,7 @@ ChartJS.register(
   Filler
 );
 
-const BaseChart = ({ 
+const BaseChart = React.memo(({ 
   config, 
   data, 
   loading, 
@@ -199,6 +199,7 @@ const BaseChart = ({
       </div>
     </div>
   );
-};
+});
 
+BaseChart.displayName = 'BaseChart';
 export default BaseChart;

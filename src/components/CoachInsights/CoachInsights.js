@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BarChart3, TrendingUp, Calendar } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../services/supabaseClient';
@@ -17,6 +17,11 @@ const CoachInsights = () => {
   const [availableMesos, setAvailableMesos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  // Add refs for request cancellation
+  const seasonsAbortController = useRef(null);
+  const coachesAbortController = useRef(null);
+  const mesosAbortController = useRef(null);
   
   // Get coach email from authenticated user or URL override
   const urlParams = new URLSearchParams(window.location.search);
@@ -46,6 +51,12 @@ const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase
   useEffect(() => {
     const loadSeasons = async () => {
       try {
+        // Cancel previous request
+        if (seasonsAbortController.current) {
+          seasonsAbortController.current.abort();
+        }
+        seasonsAbortController.current = new AbortController();
+        
         setLoading(true);
         setError(null);
 
@@ -69,6 +80,7 @@ const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase
         }
 
       } catch (err) {
+        if (err.name === 'AbortError') return; // Ignore aborted requests
         console.error('Error loading seasons:', err);
         setError('Failed to load seasons');
       } finally {
@@ -77,7 +89,14 @@ const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase
     };
 
     loadSeasons();
-  }, [selectedSeason]);
+    
+    // Cleanup function
+    return () => {
+      if (seasonsAbortController.current) {
+        seasonsAbortController.current.abort();
+      }
+    };
+  }, []); // Remove selectedSeason dependency to prevent unnecessary re-runs
 
   // Load available coaches (admin only)
   useEffect(() => {
@@ -89,6 +108,12 @@ const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase
 
     const loadCoaches = async () => {
       try {
+        // Cancel previous request
+        if (coachesAbortController.current) {
+          coachesAbortController.current.abort();
+        }
+        coachesAbortController.current = new AbortController();
+
         // Get active coaches from rhwb_coaches table
         const { data, error } = await supabase
           .from('rhwb_coaches')
@@ -124,13 +149,21 @@ const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase
         }
 
       } catch (error) {
+        if (error.name === 'AbortError') return; // Ignore aborted requests
         console.error('Error in loadCoaches:', error);
         setAvailableCoaches([]);
       }
     };
 
     loadCoaches();
-  }, [isAdmin, selectedSeason, seasons]);
+    
+    // Cleanup function
+    return () => {
+      if (coachesAbortController.current) {
+        coachesAbortController.current.abort();
+      }
+    };
+  }, [isAdmin, selectedSeason, seasons.length]); // Use seasons.length instead of seasons array
 
   // Load available mesocycles based on selected season
   useEffect(() => {
@@ -142,6 +175,11 @@ const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase
 
     const loadMesos = async () => {
       try {
+        // Cancel previous request
+        if (mesosAbortController.current) {
+          mesosAbortController.current.abort();
+        }
+        mesosAbortController.current = new AbortController();
         
         // Use the table name from other charts: rhwb_coach_input
         const { data, error } = await supabase
@@ -170,12 +208,20 @@ const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase
         }
 
       } catch (error) {
+        if (error.name === 'AbortError') return; // Ignore aborted requests
         console.error('Error in loadMesos:', error);
         setAvailableMesos([]);
       }
     };
 
     loadMesos();
+    
+    // Cleanup function
+    return () => {
+      if (mesosAbortController.current) {
+        mesosAbortController.current.abort();
+      }
+    };
   }, [seasonNumber, coachEmail]);
 
   // Show loading state
