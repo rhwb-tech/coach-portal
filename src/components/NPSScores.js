@@ -435,7 +435,7 @@ export default function NPSScores() {
         {/* Coach Performance */}
         <div className="mb-6">
           <h4 className="font-semibold text-gray-700 mb-3 text-sm uppercase tracking-wide">Coach Performance</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <MetricCard 
               label="Feedback" 
               newScore={newRunner?.feedback_nps || 0}
@@ -478,7 +478,7 @@ export default function NPSScores() {
         {/* RHWB Club Performance */}
         <div className="mb-4">
           <h4 className="font-semibold text-gray-700 mb-3 text-sm uppercase tracking-wide">RHWB Club Performance</h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-3 gap-3">
             <MetricCard 
               label="Communications" 
               newScore={Math.round(newRunner?.rhwb_comms_nps || 0)}
@@ -638,7 +638,7 @@ export default function NPSScores() {
             }
 
             return (
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 gap-6">
                 {availablePrograms.map(program => (
                   <ProgramCard key={program} program={program} />
                 ))}
