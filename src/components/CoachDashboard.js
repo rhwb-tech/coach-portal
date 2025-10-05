@@ -9,6 +9,7 @@ import KnowYourRunner from './KnowYourRunner';
 import SmallCouncil from './SmallCouncil';
 import UserGuide from './UserGuide';
 import CoachInsights from './CoachInsights/CoachInsights';
+import NPSScores from './NPSScores';
 
 const CoachDashboard = () => {
   const { user, isLoading, logout, isEmailSent } = useAuth();
@@ -984,6 +985,21 @@ const CoachDashboard = () => {
                 <span>Coach Insights</span>
               </button>
               
+              <button
+                onClick={() => {
+                  updateCurrentView('nps-scores');
+                  setHamburgerMenuOpen(false);
+                }}
+                className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
+                  currentView === 'nps-scores' 
+                    ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <BarChart3 className="h-4 w-4" />
+                <span>NPS Scores</span>
+              </button>
+              
               {isAdmin() && (
                 <button
                   onClick={() => {
@@ -1182,6 +1198,21 @@ const CoachDashboard = () => {
             >
               <TrendingUp className="h-4 w-4" />
               <span>Coach Insights</span>
+            </button>
+            
+            <button
+              onClick={() => {
+                updateCurrentView('nps-scores');
+                setHamburgerMenuOpen(false);
+              }}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
+                currentView === 'nps-scores' 
+                  ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                  : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <BarChart3 className="h-4 w-4" />
+              <span>NPS Scores</span>
             </button>
             
             {isAdmin() && (
@@ -1496,6 +1527,8 @@ const CoachDashboard = () => {
         <RHWBConnect />
       ) : currentView === 'coach-insights' ? (
         <CoachInsights />
+      ) : currentView === 'nps-scores' ? (
+        <NPSScores />
       ) : currentView === 'small-council' ? (
         <SmallCouncil coachEmail={coachEmail} currentSeason={currentSeason} />
       ) : (

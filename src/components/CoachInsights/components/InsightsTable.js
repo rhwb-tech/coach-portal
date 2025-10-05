@@ -18,7 +18,7 @@ const InsightsTable = ({ tableData, loading, error }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [hiddenColumns, setHiddenColumns] = useState(new Set());
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 20;
+  const itemsPerPage = 10;
 
   // Component for truncated text with hover tooltip
   const TruncatedText = ({ text, maxWords = 5 }) => {

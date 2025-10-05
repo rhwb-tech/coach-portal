@@ -289,12 +289,7 @@ const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase
           error={errorData}
         />
 
-        {/* Detailed Table */}
-        <InsightsTable
-          tableData={tableData}
-          loading={loadingData}
-          error={errorData}
-        />
+        {/* Runner Survey Results table moved to NPS Scores page */}
       </div>
     </div>
   );
