@@ -424,17 +424,8 @@ export const TABLE_CONFIG = {
   `,
   columns: [
     { key: 'program', label: 'Program', sortable: true },
-    { key: 'are_you_a_new_or_return_runner_to_rhwb', label: 'New/Return Runner', sortable: true },
-    { key: 'race_type', label: 'Race Type', sortable: true },
-    { key: 'feedback_quality', label: 'Feedback Quality', sortable: true },
-    { key: 'communication', label: 'Communication', sortable: true },
-    { key: 'relationship', label: 'Relationship', sortable: true },
-    { key: 'recommendation', label: 'Recommendation', sortable: true },
-    { key: 'comments', label: 'Comments', sortable: false },
-    { key: 'rhwb_effectiveness', label: 'RHWB Effectiveness', sortable: true },
-    { key: 'rhwb_knowledge_depth', label: 'RHWB Knowledge Depth', sortable: true },
-    { key: 'rhwb_recommendation', label: 'RHWB Recommendation', sortable: true },
-    { key: 'rhwb_comments', label: 'RHWB Comments', sortable: false }
+    { key: 'comments', label: 'Coach Qualitative Feedback', sortable: false },
+    { key: 'rhwb_comments', label: 'RHWB Qualitative Feedback', sortable: false }
   ]
 };
 

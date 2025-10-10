@@ -122,6 +122,9 @@ export default function NPSScores() {
   const [selectedSeason, setSelectedSeason] = useState(seasons[0] || '');
   const [selectedCoach, setSelectedCoach] = useState('');
   const [coachName, setCoachName] = useState('');
+  const [legendExpanded, setLegendExpanded] = useState(false);
+  const [surveyRate, setSurveyRate] = useState(null);
+  const [surveyRateLoading, setSurveyRateLoading] = useState(false);
 
   // Load data from v_nps_scores view
   useEffect(() => {
@@ -253,6 +256,40 @@ export default function NPSScores() {
     };
     loadSurveyData();
   }, [selectedSeason, selectedCoach, user?.email]);
+
+  // Load Survey Response Rate for selected season and coach
+  useEffect(() => {
+    const loadSurveyResponseRate = async () => {
+      try {
+        setSurveyRateLoading(true);
+        setSurveyRate(null);
+
+        const effectiveCoachLocal = isAdmin() ? (selectedCoach || coachName) : (coachName || selectedCoach);
+        if (!selectedSeason || !effectiveCoachLocal) {
+          setSurveyRateLoading(false);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('v_survey_response_rate')
+          .select('season, coach, runners_count, respondents, response_rate_percent, avg_response_rate_for_season')
+          .eq('season', selectedSeason)
+          .eq('coach', effectiveCoachLocal)
+          .single();
+
+        if (!error && data) {
+          setSurveyRate(data);
+        } else {
+          setSurveyRate(null);
+        }
+      } catch (e) {
+        setSurveyRate(null);
+      } finally {
+        setSurveyRateLoading(false);
+      }
+    };
+    loadSurveyResponseRate();
+  }, [selectedSeason, selectedCoach, coachName, userRole]);
 
   // Calculate overall averages across all coaches for the selected season and program
   const calculateOverallAverages = (program) => {
@@ -390,11 +427,11 @@ export default function NPSScores() {
             <div className="flex flex-col gap-1 text-xs ml-3">
               <div className="flex items-center gap-1">
                 <span className={descriptionColor}>New:</span>
-                <span className={`font-semibold ${getScoreColor(mainScore)}`}>{newScore}</span>
+                <span className={`font-semibold ${getScoreColor(mainScore)}`}>{Math.round(newScore)}</span>
               </div>
               <div className="flex items-center gap-1">
                 <span className={descriptionColor}>Return:</span>
-                <span className={`font-semibold ${getScoreColor(mainScore)}`}>{returnScore}</span>
+                <span className={`font-semibold ${getScoreColor(mainScore)}`}>{Math.round(returnScore)}</span>
               </div>
             </div>
           </div>
@@ -435,77 +472,89 @@ export default function NPSScores() {
         {/* Coach Performance */}
         <div className="mb-6">
           <h4 className="font-semibold text-gray-700 mb-3 text-sm uppercase tracking-wide">Coach Performance</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <MetricCard 
-              label="Feedback" 
-              newScore={newRunner?.feedback_nps || 0}
-              returnScore={returnRunner?.feedback_nps || 0}
-              allScore={allRunner?.feedback_nps}
-              borderColor="border-blue-500"
-              avgScore={overallAvg?.feedback}
-              question={questions.coach.Feedback}
-            />
-            <MetricCard 
-              label="Communications" 
-              newScore={Math.round(newRunner?.comms_nps || 0)}
-              returnScore={Math.round(returnRunner?.comms_nps || 0)}
-              allScore={allRunner?.comms_nps}
-              borderColor="border-blue-500"
-              avgScore={overallAvg?.comms}
-              question={questions.coach.Communications}
-            />
-            <MetricCard 
-              label="Relationship" 
-              newScore={Math.round(newRunner?.rel_nps || 0)}
-              returnScore={Math.round(returnRunner?.rel_nps || 0)}
-              allScore={allRunner?.rel_nps}
-              borderColor="border-blue-500"
-              avgScore={overallAvg?.rel}
-              question={questions.coach.Relationship}
-            />
-            <MetricCard 
-              label="Recommendation" 
-              newScore={newRunner?.reco_nps || 0}
-              returnScore={returnRunner?.reco_nps || 0}
-              allScore={allRunner?.reco_nps}
-              borderColor="border-blue-500"
-              avgScore={overallAvg?.reco}
-              question={questions.coach.Recommendation}
-            />
+          <div className="space-y-3">
+            {/* Recommendation - Full width row */}
+            <div className="grid grid-cols-1">
+              <MetricCard 
+                label="Recommendation" 
+                newScore={newRunner?.reco_nps || 0}
+                returnScore={returnRunner?.reco_nps || 0}
+                allScore={allRunner?.reco_nps}
+                borderColor="border-blue-500"
+                avgScore={overallAvg?.reco}
+                question={questions.coach.Recommendation}
+              />
+            </div>
+            {/* Feedback, Communications, Relationship - 3 column row */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <MetricCard 
+                label="Feedback" 
+                newScore={newRunner?.feedback_nps || 0}
+                returnScore={returnRunner?.feedback_nps || 0}
+                allScore={allRunner?.feedback_nps}
+                borderColor="border-blue-500"
+                avgScore={overallAvg?.feedback}
+                question={questions.coach.Feedback}
+              />
+              <MetricCard 
+                label="Communications" 
+                newScore={Math.round(newRunner?.comms_nps || 0)}
+                returnScore={Math.round(returnRunner?.comms_nps || 0)}
+                allScore={allRunner?.comms_nps}
+                borderColor="border-blue-500"
+                avgScore={overallAvg?.comms}
+                question={questions.coach.Communications}
+              />
+              <MetricCard 
+                label="Relationship" 
+                newScore={Math.round(newRunner?.rel_nps || 0)}
+                returnScore={Math.round(returnRunner?.rel_nps || 0)}
+                allScore={allRunner?.rel_nps}
+                borderColor="border-blue-500"
+                avgScore={overallAvg?.rel}
+                question={questions.coach.Relationship}
+              />
+            </div>
           </div>
         </div>
 
         {/* RHWB Club Performance */}
         <div className="mb-4">
           <h4 className="font-semibold text-gray-700 mb-3 text-sm uppercase tracking-wide">RHWB Club Performance</h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-3 gap-3">
-            <MetricCard 
-              label="Communications" 
-              newScore={Math.round(newRunner?.rhwb_comms_nps || 0)}
-              returnScore={Math.round(returnRunner?.rhwb_comms_nps || 0)}
-              allScore={allRunner?.rhwb_comms_nps}
-              borderColor="border-purple-500"
-              avgScore={overallAvg?.rhwb_comms}
-              question={questions.rhwb.Communications}
-            />
-            <MetricCard 
-              label="Knowledge" 
-              newScore={newRunner?.rhwb_knowledge_nps || 0}
-              returnScore={returnRunner?.rhwb_knowledge_nps || 0}
-              allScore={allRunner?.rhwb_knowledge_nps}
-              borderColor="border-purple-500"
-              avgScore={overallAvg?.rhwb_knowledge}
-              question={questions.rhwb.Knowledge}
-            />
-            <MetricCard 
-              label="Recommendation" 
-              newScore={newRunner?.rhwb_reco_nps || 0}
-              returnScore={returnRunner?.rhwb_reco_nps || 0}
-              allScore={allRunner?.rhwb_reco_nps}
-              borderColor="border-purple-500"
-              avgScore={overallAvg?.rhwb_reco}
-              question={questions.rhwb.Recommendation}
-            />
+          <div className="space-y-3">
+            {/* Recommendation - Full width row */}
+            <div className="grid grid-cols-1">
+              <MetricCard 
+                label="Recommendation" 
+                newScore={newRunner?.rhwb_reco_nps || 0}
+                returnScore={returnRunner?.rhwb_reco_nps || 0}
+                allScore={allRunner?.rhwb_reco_nps}
+                borderColor="border-purple-500"
+                avgScore={overallAvg?.rhwb_reco}
+                question={questions.rhwb.Recommendation}
+              />
+            </div>
+            {/* Communications and Knowledge - 2 column row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <MetricCard 
+                label="Communications" 
+                newScore={Math.round(newRunner?.rhwb_comms_nps || 0)}
+                returnScore={Math.round(returnRunner?.rhwb_comms_nps || 0)}
+                allScore={allRunner?.rhwb_comms_nps}
+                borderColor="border-purple-500"
+                avgScore={overallAvg?.rhwb_comms}
+                question={questions.rhwb.Communications}
+              />
+              <MetricCard 
+                label="Knowledge" 
+                newScore={newRunner?.rhwb_knowledge_nps || 0}
+                returnScore={returnRunner?.rhwb_knowledge_nps || 0}
+                allScore={allRunner?.rhwb_knowledge_nps}
+                borderColor="border-purple-500"
+                avgScore={overallAvg?.rhwb_knowledge}
+                question={questions.rhwb.Knowledge}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -646,78 +695,118 @@ export default function NPSScores() {
             );
           })()}
         </div>
-        {/* Legend */}
+        {/* Legend - Collapsible Accordion */}
         <div className="mt-8">
+          <div className="bg-white rounded-lg shadow-md">
+            <button
+              onClick={() => setLegendExpanded(!legendExpanded)}
+              className="w-full flex items-center justify-between p-6 text-left hover:bg-gray-50 transition-colors"
+            >
+              <h4 className="text-lg font-semibold text-gray-900">Legend</h4>
+              <ChevronDown 
+                className={`h-5 w-5 text-gray-500 transition-transform duration-200 ${
+                  legendExpanded ? 'rotate-180' : ''
+                }`} 
+              />
+            </button>
+            {legendExpanded && (
+              <div className="px-6 pb-6 border-t border-gray-200">
+                <div className="mb-4 text-sm text-gray-700 space-y-2">
+                  <p>
+                    <span className="font-semibold">Net Promoter Score (NPS)</span> measures Runner satisfaction and loyalty based on survey ratings from 0-10:
+                  </p>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>
+                      <span className="font-medium">Promoters (9-10)</span>: Highly satisfied respondents who would recommend
+                    </li>
+                    <li>
+                      <span className="font-medium">Passives (7-8)</span>: Satisfied but unenthusiastic respondents
+                    </li>
+                    <li>
+                      <span className="font-medium">Detractors (0-6)</span>: Dissatisfied respondents who may discourage others
+                    </li>
+                  </ul>
+                  <p>
+                    <span className="font-medium">Formula:</span> NPS = (% Promoters) - (% Detractors)
+                  </p>
+                  <p>
+                    NPS scores range from -100 to +100. A positive score indicates more promoters than detractors.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-6 h-6 rounded bg-green-800 border border-green-900" />
+                    <div className="text-sm text-gray-700">
+                      <div className="font-semibold">Score ≥ 90</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-6 h-6 rounded bg-green-200 border border-green-300" />
+                    <div className="text-sm text-gray-700">
+                      <div className="font-semibold">50 ≤ Score ≤ 90</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-6 h-6 rounded bg-orange-200 border border-orange-300" />
+                    <div className="text-sm text-gray-700">
+                      <div className="font-semibold">0 ≤ Score &lt; 50</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-6 h-6 rounded bg-pink-200 border border-pink-300" />
+                    <div className="text-sm text-gray-700">
+                      <div className="font-semibold">-50 ≤ Score &lt; 0</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-6 h-6 rounded bg-red-600 border border-red-700" />
+                    <div className="text-sm text-gray-700">
+                      <div className="font-semibold">Score &lt; -50</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-2 rounded bg-green-500" />
+                    <div className="text-sm text-gray-700">
+                      <div className="font-semibold">vs Average Bar (Green)</div>
+                      <div className="text-gray-500">Your performance is better than your peers.</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-2 rounded bg-red-500" />
+                    <div className="text-sm text-gray-700">
+                      <div className="font-semibold">vs Average Bar (Red)</div>
+                      <div className="text-gray-500">Your performance falls short compared to your peers.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        {/* Survey Response Rate (moved below Legend) */}
+        <div className="mt-6">
           <div className="bg-white rounded-lg shadow-md p-6">
-            <div className="mb-4 text-sm text-gray-700 space-y-2">
-              <p>
-                <span className="font-semibold">Net Promoter Score (NPS)</span> measures Runner satisfaction and loyalty based on survey ratings from 0-10:
-              </p>
-              <ul className="list-disc pl-5 space-y-1">
-                <li>
-                  <span className="font-medium">Promoters (9-10)</span>: Highly satisfied respondents who would recommend
-                </li>
-                <li>
-                  <span className="font-medium">Passives (7-8)</span>: Satisfied but unenthusiastic respondents
-                </li>
-                <li>
-                  <span className="font-medium">Detractors (0-6)</span>: Dissatisfied respondents who may discourage others
-                </li>
-              </ul>
-              <p>
-                <span className="font-medium">Formula:</span> NPS = (% Promoters) - (% Detractors)
-              </p>
-              <p>
-                NPS scores range from -100 to +100. A positive score indicates more promoters than detractors.
-              </p>
-            </div>
-            <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">LEGEND</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div className="flex items-center space-x-3">
-                <div className="w-6 h-6 rounded bg-green-800 border border-green-900" />
-                <div className="text-sm text-gray-700">
-                  <div className="font-semibold">Score ≥ 90</div>
+            <h3 className="font-semibold text-gray-700 mb-3 text-sm uppercase tracking-wide">Survey Response Rate</h3>
+            {surveyRateLoading ? (
+              <div className="py-6 text-center text-gray-500 text-sm">Loading...</div>
+            ) : surveyRate ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 bg-gray-50 rounded-lg border" title="Percentage of your cohort responded to the survey">
+                  <div className="text-xs text-gray-600 mb-1">Response Rate</div>
+                  <div className="text-3xl font-bold text-gray-800">{Math.round(surveyRate.response_rate_percent)}%</div>
+                </div>
+                <div className="p-4 bg-gray-50 rounded-lg border" title="Average Response Rate across all coaches this season">
+                  <div className="text-xs text-gray-600 mb-1">Season Average</div>
+                  <div className="text-3xl font-bold text-gray-800">{Math.round(surveyRate.avg_response_rate_for_season)}%</div>
+                </div>
+                <div className="p-4 bg-gray-50 rounded-lg border" title="No of respondents compared to total no of runners in your cohort">
+                  <div className="text-xs text-gray-600 mb-1">Respondents / Total Runners</div>
+                  <div className="text-3xl font-bold text-gray-800">{surveyRate.respondents} / {surveyRate.runners_count}</div>
                 </div>
               </div>
-              <div className="flex items-center space-x-3">
-                <div className="w-6 h-6 rounded bg-green-200 border border-green-300" />
-                <div className="text-sm text-gray-700">
-                  <div className="font-semibold">50 ≤ Score ≤ 90</div>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3">
-                <div className="w-6 h-6 rounded bg-orange-200 border border-orange-300" />
-                <div className="text-sm text-gray-700">
-                  <div className="font-semibold">0 ≤ Score &lt; 50</div>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3">
-                <div className="w-6 h-6 rounded bg-pink-200 border border-pink-300" />
-                <div className="text-sm text-gray-700">
-                  <div className="font-semibold">-50 ≤ Score &lt; 0</div>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3">
-                <div className="w-6 h-6 rounded bg-red-600 border border-red-700" />
-                <div className="text-sm text-gray-700">
-                  <div className="font-semibold">Score &lt; -50</div>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-2 rounded bg-green-500" />
-                <div className="text-sm text-gray-700">
-                  <div className="font-semibold">vs Average Bar (Green)</div>
-                  <div className="text-gray-500">Your performance is better than your peers.</div>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-2 rounded bg-red-500" />
-                <div className="text-sm text-gray-700">
-                  <div className="font-semibold">vs Average Bar (Red)</div>
-                  <div className="text-gray-500">Your performance falls short compared to your peers.</div>
-                </div>
-              </div>
-            </div>
+            ) : (
+              <div className="py-6 text-center text-gray-500 text-sm">No response rate data available for the selected filters.</div>
+            )}
           </div>
         </div>
         {/* Runner Survey Results moved from Coach Insights */}
