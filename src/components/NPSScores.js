@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import { BarChart3, Calendar, ChevronDown, User } from 'lucide-react';
+import { BarChart3, Calendar, ChevronDown, User, Download } from 'lucide-react';
 import InsightsTable from './CoachInsights/components/InsightsTable';
 
 export default function NPSScores() {
@@ -125,6 +125,29 @@ export default function NPSScores() {
   const [legendExpanded, setLegendExpanded] = useState(false);
   const [surveyRate, setSurveyRate] = useState(null);
   const [surveyRateLoading, setSurveyRateLoading] = useState(false);
+
+  // Color functions for conditional formatting
+  const getScoreColor = (score) => {
+    if (score > 90) return 'text-white'; // White text only for dark green background
+    if (score < -50) return 'text-white'; // White text only for dark red background
+    return 'text-gray-700'; // Default color for other values
+  };
+
+  const getBgColor = (score) => {
+    if (score > 90) return 'bg-green-800'; // Dark green background
+    if (score >= 50 && score <= 90) return 'bg-green-200'; // Light mint green background
+    if (score >= 0 && score < 50) return 'bg-orange-200'; // Light beige/peach background
+    if (score >= -50 && score < 0) return 'bg-pink-200'; // Light pink background
+    return 'bg-red-600'; // Bright red background
+  };
+
+  const getCardBgColor = (score) => {
+    if (score > 90) return 'bg-green-800'; // Dark green background
+    if (score >= 50 && score <= 90) return 'bg-green-100'; // Light mint green background
+    if (score >= 0 && score < 50) return 'bg-orange-100'; // Light beige/peach background
+    if (score >= -50 && score < 0) return 'bg-pink-100'; // Light pink background
+    return 'bg-red-600'; // Bright red background
+  };
 
   // Load data from v_nps_scores view
   useEffect(() => {
@@ -325,9 +348,15 @@ export default function NPSScores() {
     }
 
     // Count only New/Return responses, exclude aggregated 'All'
-    const totalResponses = programData
-      .filter(item => item.runner_status === 'New' || item.runner_status === 'Return')
+    const newResponses = programData
+      .filter(item => item.runner_status === 'New')
       .reduce((sum, item) => sum + (item.total_responses || 0), 0);
+    
+    const returnResponses = programData
+      .filter(item => item.runner_status === 'Return')
+      .reduce((sum, item) => sum + (item.total_responses || 0), 0);
+    
+    const totalResponses = newResponses + returnResponses;
     
     // Get individual runner data
     const newRunner = programData.find(d => d.runner_status === 'New');
@@ -345,27 +374,6 @@ export default function NPSScores() {
     const avgRhwbKnowledge = Math.round(programData.reduce((sum, item) => sum + item.rhwb_knowledge_nps, 0) / programData.length);
     const avgRhwbReco = Math.round(programData.reduce((sum, item) => sum + item.rhwb_reco_nps, 0) / programData.length);
 
-    const getScoreColor = (score) => {
-      if (score > 90) return 'text-white'; // White text only for dark green background
-      if (score < -50) return 'text-white'; // White text only for dark red background
-      return 'text-gray-700'; // Default color for other values
-    };
-
-    const getBgColor = (score) => {
-      if (score > 90) return 'bg-green-800'; // Dark green background
-      if (score >= 50 && score <= 90) return 'bg-green-200'; // Light mint green background
-      if (score >= 0 && score < 50) return 'bg-orange-200'; // Light beige/peach background
-      if (score >= -50 && score < 0) return 'bg-pink-200'; // Light pink background
-      return 'bg-red-600'; // Bright red background
-    };
-
-    const getCardBgColor = (score) => {
-      if (score > 90) return 'bg-green-800'; // Dark green background
-      if (score >= 50 && score <= 90) return 'bg-green-100'; // Light mint green background
-      if (score >= 0 && score < 50) return 'bg-orange-100'; // Light beige/peach background
-      if (score >= -50 && score < 0) return 'bg-pink-100'; // Light pink background
-      return 'bg-red-600'; // Bright red background
-    };
 
     // Tooltip component for showing question text
     const Tooltip = ({ children, text }) => {
@@ -439,7 +447,7 @@ export default function NPSScores() {
           {avgScore !== null && (
             <div className="mt-2 pt-2 border-t border-gray-300">
               <div className="flex items-center justify-between text-xs mb-1">
-                <span className={descriptionColor}>vs Average:</span>
+                <span className={descriptionColor}>RHWB Average:</span>
                 <span className={`font-semibold ${isAboveAvg ? 'text-green-700' : 'text-red-700'}`}>
                   {isAboveAvg ? '+' : ''}{diff}
                 </span>
@@ -465,7 +473,7 @@ export default function NPSScores() {
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xl font-bold text-gray-800">{program}</h3>
           <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
-            {totalResponses} responses
+            {totalResponses} Responses (New {newResponses}/Return {returnResponses})
           </span>
         </div>
 
@@ -476,7 +484,7 @@ export default function NPSScores() {
             {/* Recommendation - Full width row */}
             <div className="grid grid-cols-1">
               <MetricCard 
-                label="Recommendation" 
+                label="Coach Overall NPS" 
                 newScore={newRunner?.reco_nps || 0}
                 returnScore={returnRunner?.reco_nps || 0}
                 allScore={allRunner?.reco_nps}
@@ -525,7 +533,7 @@ export default function NPSScores() {
             {/* Recommendation - Full width row */}
             <div className="grid grid-cols-1">
               <MetricCard 
-                label="Recommendation" 
+                label="RHWB Overall NPS" 
                 newScore={newRunner?.rhwb_reco_nps || 0}
                 returnScore={returnRunner?.rhwb_reco_nps || 0}
                 allScore={allRunner?.rhwb_reco_nps}
@@ -791,13 +799,13 @@ export default function NPSScores() {
               <div className="py-6 text-center text-gray-500 text-sm">Loading...</div>
             ) : surveyRate ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 bg-gray-50 rounded-lg border" title="Percentage of your cohort responded to the survey">
-                  <div className="text-xs text-gray-600 mb-1">Response Rate</div>
-                  <div className="text-3xl font-bold text-gray-800">{Math.round(surveyRate.response_rate_percent)}%</div>
+                <div className={`p-4 rounded-lg border-l-4 ${getCardBgColor(surveyRate.response_rate_percent)} border-blue-500`} title="Percentage of your cohort responded to the survey">
+                  <div className={`text-xs mb-1 font-medium ${getScoreColor(surveyRate.response_rate_percent)}`}>Response Rate</div>
+                  <div className={`text-3xl font-bold ${getScoreColor(surveyRate.response_rate_percent)}`}>{Math.round(surveyRate.response_rate_percent)}%</div>
                 </div>
-                <div className="p-4 bg-gray-50 rounded-lg border" title="Average Response Rate across all coaches this season">
-                  <div className="text-xs text-gray-600 mb-1">Season Average</div>
-                  <div className="text-3xl font-bold text-gray-800">{Math.round(surveyRate.avg_response_rate_for_season)}%</div>
+                <div className={`p-4 rounded-lg border-l-4 ${getCardBgColor(surveyRate.avg_response_rate_for_season)} border-purple-500`} title="Average Response Rate across all coaches this season">
+                  <div className={`text-xs mb-1 font-medium ${getScoreColor(surveyRate.avg_response_rate_for_season)}`}>Season Average</div>
+                  <div className={`text-3xl font-bold ${getScoreColor(surveyRate.avg_response_rate_for_season)}`}>{Math.round(surveyRate.avg_response_rate_for_season)}%</div>
                 </div>
                 <div className="p-4 bg-gray-50 rounded-lg border" title="No of respondents compared to total no of runners in your cohort">
                   <div className="text-xs text-gray-600 mb-1">Respondents / Total Runners</div>
@@ -809,10 +817,85 @@ export default function NPSScores() {
             )}
           </div>
         </div>
-        {/* Runner Survey Results moved from Coach Insights */}
-        <div className="mt-8">
-          {/* Debug filters removed per request */}
-          <InsightsTable tableData={surveyData} loading={surveyLoading} error={surveyError} />
+        {/* Runner Survey Results - Split into two tables */}
+        <div className="mt-8 space-y-6">
+          {/* Coach Qualitative Feedback Table */}
+          <div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 space-y-2 sm:space-y-0">
+              <h3 className="text-lg font-semibold text-gray-900">Coach Qualitative Feedback</h3>
+              <div className="flex items-center space-x-3">
+                <span className="text-sm text-gray-500">
+                  {surveyData.filter(row => row.comments && row.comments.trim() !== '').length} records
+                </span>
+                <button
+                  onClick={() => {
+                    const coachData = surveyData.filter(row => row.comments && row.comments.trim() !== '');
+                    if (!coachData.length) return;
+                    const csvContent = ['Coach Qualitative Feedback', ...coachData.map(row => `"${(row.comments || '').replace(/"/g, '""')}"`)].join('\n');
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `coach-qualitative-feedback-${new Date().toISOString().split('T')[0]}.csv`;
+                    link.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                  disabled={!surveyData.filter(row => row.comments && row.comments.trim() !== '').length}
+                >
+                  <Download className="h-4 w-4" />
+                  <span className="hidden sm:inline">Export CSV</span>
+                </button>
+              </div>
+            </div>
+            <InsightsTable 
+              tableData={surveyData.filter(row => row.comments && row.comments.trim() !== '')} 
+              loading={surveyLoading} 
+              error={surveyError}
+              columns={[
+                { key: 'comments', label: 'Coach Qualitative Feedback', sortable: false }
+              ]}
+            />
+          </div>
+          
+          {/* RHWB Qualitative Feedback Table */}
+          <div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 space-y-2 sm:space-y-0">
+              <h3 className="text-lg font-semibold text-gray-900">RHWB Qualitative Feedback</h3>
+              <div className="flex items-center space-x-3">
+                <span className="text-sm text-gray-500">
+                  {surveyData.filter(row => row.rhwb_comments && row.rhwb_comments.trim() !== '').length} records
+                </span>
+                <button
+                  onClick={() => {
+                    const rhwbData = surveyData.filter(row => row.rhwb_comments && row.rhwb_comments.trim() !== '');
+                    if (!rhwbData.length) return;
+                    const csvContent = ['RHWB Qualitative Feedback', ...rhwbData.map(row => `"${(row.rhwb_comments || '').replace(/"/g, '""')}"`)].join('\n');
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `rhwb-qualitative-feedback-${new Date().toISOString().split('T')[0]}.csv`;
+                    link.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                  disabled={!surveyData.filter(row => row.rhwb_comments && row.rhwb_comments.trim() !== '').length}
+                >
+                  <Download className="h-4 w-4" />
+                  <span className="hidden sm:inline">Export CSV</span>
+                </button>
+              </div>
+            </div>
+            <InsightsTable 
+              tableData={surveyData.filter(row => row.rhwb_comments && row.rhwb_comments.trim() !== '')} 
+              loading={surveyLoading} 
+              error={surveyError}
+              columns={[
+                { key: 'rhwb_comments', label: 'RHWB Qualitative Feedback', sortable: false }
+              ]}
+            />
+          </div>
         </div>
       </div>
     </div>

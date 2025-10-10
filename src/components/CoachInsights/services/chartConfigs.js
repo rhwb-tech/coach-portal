@@ -423,7 +423,6 @@ export const TABLE_CONFIG = {
     WHERE season = $1 AND coach_email = $2;
   `,
   columns: [
-    { key: 'program', label: 'Program', sortable: true },
     { key: 'comments', label: 'Coach Qualitative Feedback', sortable: false },
     { key: 'rhwb_comments', label: 'RHWB Qualitative Feedback', sortable: false }
   ]

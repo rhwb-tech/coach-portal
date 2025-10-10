@@ -12,8 +12,9 @@ import {
 import { getTableConfig } from '../services/chartConfigs';
 import { formatNumber, formatPercentage } from '../utils/chartHelpers';
 
-const InsightsTable = ({ tableData, loading, error }) => {
+const InsightsTable = ({ tableData, loading, error, columns }) => {
   const tableConfig = getTableConfig();
+  const displayColumns = columns || tableConfig.columns;
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [searchTerm, setSearchTerm] = useState('');
   const [hiddenColumns, setHiddenColumns] = useState(new Set());
@@ -71,9 +72,15 @@ const InsightsTable = ({ tableData, loading, error }) => {
 
     let filtered = tableData;
 
+    // Filter out rows where both comments and rhwb_comments are null/empty
+    filtered = tableData.filter(row => 
+      (row.comments && row.comments.trim() !== '') || 
+      (row.rhwb_comments && row.rhwb_comments.trim() !== '')
+    );
+
     // Apply search filter
     if (searchTerm.trim()) {
-      filtered = tableData.filter(row =>
+      filtered = filtered.filter(row =>
         Object.values(row).some(value =>
           String(value).toLowerCase().includes(searchTerm.toLowerCase())
         )
@@ -139,7 +146,7 @@ const InsightsTable = ({ tableData, loading, error }) => {
   const exportToCSV = () => {
     if (!processedData.length) return;
 
-    const visibleColumns = tableConfig.columns.filter(col => !hiddenColumns.has(col.key));
+    const visibleColumns = displayColumns.filter(col => !hiddenColumns.has(col.key));
     const csvHeaders = visibleColumns.map(col => col.label).join(',');
     
     const csvRows = processedData.map(row =>
@@ -169,7 +176,7 @@ const InsightsTable = ({ tableData, loading, error }) => {
   };
 
   // Get visible columns
-  const visibleColumns = tableConfig.columns.filter(col => !hiddenColumns.has(col.key));
+  const visibleColumns = displayColumns.filter(col => !hiddenColumns.has(col.key));
 
   // Show loading state
   if (loading) {
@@ -221,70 +228,29 @@ const InsightsTable = ({ tableData, loading, error }) => {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200">
       <div className="p-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 space-y-3 sm:space-y-0">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">{tableConfig.title}</h3>
-            <p className="text-sm text-gray-600 mt-1">{tableConfig.description}</p>
+        {/* Header - only show if no custom title provided */}
+        {!columns && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 space-y-3 sm:space-y-0">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">{tableConfig.title}</h3>
+              <p className="text-sm text-gray-600 mt-1">{tableConfig.description}</p>
+            </div>
+            <div className="flex items-center space-x-3">
+              <span className="text-sm text-gray-500">
+                {processedData.length} records
+              </span>
+              <button
+                onClick={exportToCSV}
+                className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                disabled={!processedData.length}
+              >
+                <Download className="h-4 w-4" />
+                <span className="hidden sm:inline">Export CSV</span>
+              </button>
+            </div>
           </div>
-          <div className="flex items-center space-x-3">
-            <span className="text-sm text-gray-500">
-              {processedData.length} records
-            </span>
-            <button
-              onClick={exportToCSV}
-              className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
-              disabled={!processedData.length}
-            >
-              <Download className="h-4 w-4" />
-              <span className="hidden sm:inline">Export CSV</span>
-            </button>
-          </div>
-        </div>
+        )}
 
-        {/* Controls */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          {/* Search */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search all columns..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1); // Reset to first page on search
-              }}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-            />
-          </div>
-
-          {/* Column Visibility */}
-          <div className="relative">
-            <details className="relative">
-              <summary className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 text-sm">
-                <Eye className="h-4 w-4" />
-                <span>Columns</span>
-                <ChevronDown className="h-4 w-4" />
-              </summary>
-              <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 p-3 min-w-[200px]">
-                <div className="space-y-2">
-                  {tableConfig.columns.map((column) => (
-                    <label key={column.key} className="flex items-center space-x-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={!hiddenColumns.has(column.key)}
-                        onChange={() => toggleColumnVisibility(column.key)}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span>{column.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </details>
-          </div>
-        </div>
 
         {/* Table */}
         <div className="overflow-x-auto">
