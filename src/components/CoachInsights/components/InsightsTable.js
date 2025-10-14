@@ -49,9 +49,9 @@ const InsightsTable = ({ tableData, loading, error, columns }) => {
   const formatCellValue = (value, format, columnKey) => {
     if (value === null || value === undefined) return '-';
     
-    // Special handling for comment columns
+    // Special handling for comment columns - show full text without truncation
     if (columnKey === 'comments' || columnKey === 'rhwb_comments') {
-      return <TruncatedText text={value} maxWords={5} />;
+      return <div className="whitespace-pre-wrap break-words">{value}</div>;
     }
     
     switch (format) {
@@ -254,7 +254,7 @@ const InsightsTable = ({ tableData, loading, error, columns }) => {
 
         {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full table-fixed">
             <thead className="bg-gray-50 border-y border-gray-200">
               <tr>
                 {visibleColumns.map((column) => (
@@ -293,7 +293,7 @@ const InsightsTable = ({ tableData, loading, error, columns }) => {
                 paginatedData.map((row, index) => (
                   <tr key={index} className="hover:bg-gray-50">
                     {visibleColumns.map((column) => (
-                      <td key={column.key} className="px-4 py-3 text-sm text-gray-900">
+                      <td key={column.key} className={`px-4 py-3 text-sm text-gray-900 ${column.key === 'comments' || column.key === 'rhwb_comments' ? 'max-w-none' : ''}`}>
                         {formatCellValue(row[column.key], column.format, column.key)}
                       </td>
                     ))}
