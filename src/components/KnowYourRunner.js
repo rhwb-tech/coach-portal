@@ -47,6 +47,18 @@ const KnowYourRunner = ({
   const [seasonMetrics, setSeasonMetrics] = useState(null);
   const [metricsLoading, setMetricsLoading] = useState(false);
   
+  // Race timings state
+  const [raceTimings, setRaceTimings] = useState(null);
+  const [raceTimingsLoading, setRaceTimingsLoading] = useState(false);
+  const [editingRaceTimings, setEditingRaceTimings] = useState(false);
+  const [raceTimingsFormData, setRaceTimingsFormData] = useState({
+    race_timings: '',
+    race_pr: false,
+    race_comments: ''
+  });
+  const [raceTimingsMessage, setRaceTimingsMessage] = useState({ type: '', text: '' });
+  const [raceTimingsValidation, setRaceTimingsValidation] = useState({ race_timings: '' });
+  
   // Edit state for meso metrics
   const [editingMeso, setEditingMeso] = useState(null);
   const [editFormData, setEditFormData] = useState({});
@@ -168,6 +180,11 @@ const KnowYourRunner = ({
     if (sectionName === 'metrics' && selectedRunner && currentSeason && coachEmail) {
       fetchSeasonMetrics(selectedRunner.email_id);
     }
+    
+    // If opening race timings section and we have a selected runner, fetch the data
+    if (sectionName === 'raceTimings' && selectedRunner && currentSeason) {
+      fetchRaceTimings(selectedRunner.email_id);
+    }
   };
   
   // Validation function for overridden meso score
@@ -192,6 +209,21 @@ const KnowYourRunner = ({
     const decimalPlaces = value.toString().split('.')[1]?.length || 0;
     if (decimalPlaces > 1) {
       return { isValid: false, message: 'Score can have at most one decimal place.' };
+    }
+    
+    return { isValid: true, message: '' };
+  };
+
+  // Validation function for race timings (HH:MM:SS format)
+  const validateRaceTimings = (value) => {
+    if (value === '' || value === null || value === undefined) {
+      return { isValid: true, message: '' }; // Allow empty values
+    }
+    
+    // Check if it matches HH:MM:SS format
+    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
+    if (!timeRegex.test(value)) {
+      return { isValid: false, message: 'Please enter time in HH:MM:SS format (e.g., 01:30:45).' };
     }
     
     return { isValid: true, message: '' };
@@ -227,6 +259,43 @@ const KnowYourRunner = ({
       setSeasonMetrics(null);
     } finally {
       setMetricsLoading(false);
+    }
+  };
+
+  // Fetch race timings for a specific runner
+  const fetchRaceTimings = async (runnerEmail) => {
+    if (!runnerEmail || !currentSeason) return;
+    
+    setRaceTimingsLoading(true);
+    
+    // Get season filter
+    const seasonFilter = currentSeason.toString().startsWith('Season ') ? currentSeason : `Season ${currentSeason}`;
+    
+    try {
+      const { data, error } = await supabase
+        .from('runner_season_info')
+        .select('race_timings, race_pr, race_comments')
+        .eq('email_id', runnerEmail)
+        .eq('season', seasonFilter)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching race timings:', error);
+        setRaceTimings(null);
+      } else {
+        setRaceTimings(data);
+        // Initialize form data with current values
+        setRaceTimingsFormData({
+          race_timings: data?.race_timings || '',
+          race_pr: data?.race_pr === true || data?.race_pr === 'true' || false,
+          race_comments: data?.race_comments || ''
+        });
+      }
+    } catch (error) {
+      console.error('Error in fetchRaceTimings:', error);
+      setRaceTimings(null);
+    } finally {
+      setRaceTimingsLoading(false);
     }
   };
 
@@ -326,6 +395,107 @@ const KnowYourRunner = ({
     setEditFormData({});
     setEditValidationErrors({});
     setEditMessage({ type: '', text: '' });
+  };
+
+  // Handle race timings edit
+  const handleEditRaceTimings = () => {
+    setEditingRaceTimings(true);
+    setRaceTimingsMessage({ type: '', text: '' });
+  };
+
+  // Handle race timings form changes
+  const handleRaceTimingsFormChange = (field, value) => {
+    setRaceTimingsFormData(prev => ({ ...prev, [field]: value }));
+    
+    // Validate race timings field
+    if (field === 'race_timings') {
+      const validation = validateRaceTimings(value);
+      setRaceTimingsValidation(prev => ({ ...prev, race_timings: validation.isValid ? '' : validation.message }));
+    }
+  };
+
+  // Handle save race timings
+  const handleSaveRaceTimings = async () => {
+    if (!selectedRunner || !currentSeason) return;
+
+    // Validate race timings before saving
+    const timingsValidation = validateRaceTimings(raceTimingsFormData.race_timings);
+    if (!timingsValidation.isValid) {
+      setRaceTimingsValidation(prev => ({ ...prev, race_timings: timingsValidation.message }));
+      return;
+    }
+
+    try {
+      const seasonFilter = currentSeason.toString().startsWith('Season ') ? currentSeason : `Season ${currentSeason}`;
+      
+      // Check if record exists
+      const { data: existingData } = await supabase
+        .from('runner_season_info')
+        .select('email_id')
+        .eq('email_id', selectedRunner.email_id)
+        .eq('season', seasonFilter)
+        .single();
+
+      if (existingData) {
+        // Update existing record
+        const { error } = await supabase
+          .from('runner_season_info')
+          .update({
+            race_timings: raceTimingsFormData.race_timings || null,
+            race_pr: raceTimingsFormData.race_pr || null,
+            race_comments: raceTimingsFormData.race_comments || null
+          })
+          .eq('email_id', selectedRunner.email_id)
+          .eq('season', seasonFilter);
+
+        if (error) throw error;
+      } else {
+        // Insert new record
+        const { error } = await supabase
+          .from('runner_season_info')
+          .insert([{
+            email_id: selectedRunner.email_id,
+            season: seasonFilter,
+            race_timings: raceTimingsFormData.race_timings || null,
+            race_pr: raceTimingsFormData.race_pr || null,
+            race_comments: raceTimingsFormData.race_comments || null
+          }]);
+
+        if (error) throw error;
+      }
+
+      // Update local state
+      setRaceTimings({
+        race_timings: raceTimingsFormData.race_timings,
+        race_pr: raceTimingsFormData.race_pr,
+        race_comments: raceTimingsFormData.race_comments
+      });
+
+      // Reset edit state
+      setEditingRaceTimings(false);
+      setRaceTimingsMessage({ type: 'success', text: 'Race timings updated successfully!' });
+      
+      // Clear message after 3 seconds
+      setTimeout(() => {
+        setRaceTimingsMessage({ type: '', text: '' });
+      }, 3000);
+    } catch (error) {
+      console.error('Error saving race timings:', error);
+      setRaceTimingsMessage({ type: 'error', text: 'Failed to update race timings. Please try again.' });
+    }
+  };
+
+  // Handle cancel race timings edit
+  const handleCancelRaceTimingsEdit = () => {
+    setEditingRaceTimings(false);
+    setRaceTimingsMessage({ type: '', text: '' });
+    setRaceTimingsValidation({ race_timings: '' });
+    // Reset form data to original values
+    setRaceTimingsFormData({
+      race_timings: raceTimings?.race_timings || '',
+      race_pr: raceTimings?.race_pr === true || raceTimings?.race_pr === 'true' || false,
+      race_comments: raceTimings?.race_comments || ''
+    });
   };
 
   // Copy to clipboard function
@@ -1262,6 +1432,153 @@ const KnowYourRunner = ({
                           ) : (
                             <div className="text-gray-600 text-center py-4">
                               No season metrics found for this runner
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Race Timings */}
+                    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                      <button
+                        onClick={() => toggleSection('raceTimings')}
+                        className="w-full flex items-center justify-between p-3 sm:p-4 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center space-x-2 sm:space-x-3">
+                          <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
+                          <span className="font-medium text-gray-900 text-sm sm:text-base">Race Timings</span>
+                        </div>
+                        <ChevronDown className={`h-4 w-4 sm:h-5 sm:w-5 text-gray-400 transition-transform duration-200 ${
+                          expandedSections.raceTimings ? 'rotate-180' : ''
+                        }`} />
+                      </button>
+                      {expandedSections.raceTimings && (
+                        <div className="px-3 sm:px-4 pb-3 sm:pb-4">
+                          {!selectedRunner ? (
+                            <div className="text-gray-600 text-center py-4">
+                              Select a runner to view their race timings
+                            </div>
+                          ) : raceTimingsLoading ? (
+                            <div className="text-gray-600 text-center py-4">
+                              Loading race timings...
+                            </div>
+                          ) : (
+                            <div className="space-y-4">
+                              {/* Message display */}
+                              {raceTimingsMessage.text && (
+                                <div className={`p-3 rounded-lg text-sm font-medium ${
+                                  raceTimingsMessage.type === 'success' 
+                                    ? 'bg-green-100 text-green-800 border border-green-200' 
+                                    : 'bg-red-100 text-red-800 border border-red-200'
+                                }`}>
+                                  {raceTimingsMessage.text}
+                                </div>
+                              )}
+                              
+                              {/* Edit button */}
+                              <div className="flex justify-end">
+                                {editingRaceTimings ? (
+                                  <div className="flex space-x-2">
+                                    <button
+                                      onClick={handleSaveRaceTimings}
+                                      className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors"
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      onClick={handleCancelRaceTimingsEdit}
+                                      className="px-3 py-1 bg-gray-500 text-white text-xs rounded hover:bg-gray-600 transition-colors"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={handleEditRaceTimings}
+                                    className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                                  >
+                                    Edit
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Race Timings Form */}
+                              <div className="space-y-4">
+                                {/* Race Timings and PR in same row */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  {/* Race Timings */}
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Race Timings</label>
+                                    {editingRaceTimings ? (
+                                      <div>
+                                        <input
+                                          type="text"
+                                          value={raceTimingsFormData.race_timings}
+                                          onChange={(e) => handleRaceTimingsFormChange('race_timings', e.target.value)}
+                                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                            raceTimingsValidation.race_timings ? 'border-red-300' : 'border-gray-300'
+                                          }`}
+                                          placeholder="HH:MM:SS (e.g., 01:30:45)"
+                                          maxLength={8}
+                                        />
+                                        {raceTimingsValidation.race_timings && (
+                                          <div className="text-xs text-red-600 mt-1">
+                                            {raceTimingsValidation.race_timings}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="text-sm text-gray-900 bg-gray-50 p-3 rounded-lg min-h-[40px]">
+                                        {raceTimings?.race_timings || 'No race timings recorded'}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* PR Checkbox */}
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">PR?</label>
+                                    {editingRaceTimings ? (
+                                      <div className="flex items-center space-x-2">
+                                        <input
+                                          type="checkbox"
+                                          checked={raceTimingsFormData.race_pr}
+                                          onChange={(e) => handleRaceTimingsFormChange('race_pr', e.target.checked)}
+                                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                        />
+                                        <span className="text-sm text-gray-700">
+                                          {raceTimingsFormData.race_pr ? 'Yes, this is a PR' : 'No, not a PR'}
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <div className="text-sm text-gray-900 bg-gray-50 p-3 rounded-lg min-h-[40px] flex items-center">
+                                        {raceTimings?.race_pr ? (
+                                          <span className="text-green-600 font-medium">✓ Yes, this is a PR</span>
+                                        ) : (
+                                          <span className="text-gray-500">No, not a PR</span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Race Comments - Full width */}
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">Race Comments</label>
+                                  {editingRaceTimings ? (
+                                    <textarea
+                                      value={raceTimingsFormData.race_comments}
+                                      onChange={(e) => handleRaceTimingsFormChange('race_comments', e.target.value)}
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                                      rows={3}
+                                      placeholder="Enter race comments..."
+                                    />
+                                  ) : (
+                                    <div className="text-sm text-gray-900 bg-gray-50 p-3 rounded-lg min-h-[60px]">
+                                      {raceTimings?.race_comments || 'No race comments recorded'}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           )}
                         </div>
