@@ -10,6 +10,7 @@ import SmallCouncil from './SmallCouncil';
 import UserGuide from './UserGuide';
 import CoachInsights from './CoachInsights/CoachInsights';
 import NPSScores from './NPSScores';
+import ClubNPSScores from './ClubNPSScores';
 
 const CoachDashboard = () => {
   const { user, isLoading, logout, isEmailSent } = useAuth();
@@ -46,6 +47,7 @@ const CoachDashboard = () => {
   const [distanceMenuOpen, setDistanceMenuOpen] = useState(false);
   const [mesoMenuOpen, setMesoMenuOpen] = useState(false);
   const [hamburgerMenuOpen, setHamburgerMenuOpen] = useState(false);
+  const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   
   // Help menu states
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
@@ -95,7 +97,7 @@ const CoachDashboard = () => {
   // Redirect to default view if user doesn't have access to current view
   useEffect(() => {
     // Only redirect if not loading and user definitively doesn't have admin access
-    if (currentView === 'small-council' && !isLoading && !isAdmin()) {
+    if ((currentView === 'small-council' || currentView === 'club-nps-scores') && !isLoading && !isAdmin()) {
       updateCurrentView('know-your-runner');
     }
   }, [currentView, user?.role, isLoading]);
@@ -115,6 +117,18 @@ const CoachDashboard = () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
+
+  // Close admin menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (adminMenuOpen && !event.target.closest('.admin-menu-container')) {
+        setAdminMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [adminMenuOpen]);
 
   // Cleanup localStorage on unmount (optional)
   useEffect(() => {
@@ -700,7 +714,8 @@ const CoachDashboard = () => {
         setDistanceMenuOpen(false);
         setMesoMenuOpen(false);
       }
-      if (!event.target.closest('.hamburger-menu')) {
+      // Only close the sidebar if the click is outside both the hamburger button and the sidebar itself
+      if (!event.target.closest('.hamburger-menu') && !event.target.closest('.sidebar-nav')) {
         setHamburgerMenuOpen(false);
       }
     };
@@ -863,7 +878,7 @@ const CoachDashboard = () => {
 
   if (currentView === 'dashboard' && filteredRunners.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
         {/* Header */}
         <div className="bg-white/90 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -875,7 +890,7 @@ const CoachDashboard = () => {
                     e.stopPropagation();
                     setHamburgerMenuOpen(!hamburgerMenuOpen);
                   }}
-                  className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 hamburger-menu relative z-20 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                    className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 hamburger-menu relative z-20 min-w-[44px] min-h-[44px] flex items-center justify-center"
                   style={{ pointerEvents: 'auto' }}
                 >
                   {hamburgerMenuOpen ? (
@@ -906,7 +921,7 @@ const CoachDashboard = () => {
         </div>
 
         {/* Permanent Sidebar Navigation */}
-        <div className={`fixed top-14 sm:top-16 left-0 bg-white border-r border-gray-200 shadow-lg transition-transform duration-300 z-50 ${
+        <div className={`fixed top-14 sm:top-16 left-0 bg-white border-r border-gray-200 shadow-lg transition-transform duration-300 z-50 sidebar-nav ${
           hamburgerMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`} style={{ width: '240px', height: 'auto', maxHeight: 'calc(100vh - 4rem)' }}>
           <div className="flex flex-col">
@@ -1001,20 +1016,65 @@ const CoachDashboard = () => {
               </button>
               
               {isAdmin() && (
-                <button
-                  onClick={() => {
-                    updateCurrentView('small-council');
-                    setHamburgerMenuOpen(false);
-                  }}
-                  className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
-                    currentView === 'small-council' 
-                      ? 'bg-blue-50 text-blue-700 border border-blue-200' 
-                      : 'text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <Shield className="h-4 w-4" />
-                  <span>Admin</span>
-                </button>
+                <div className="relative admin-menu-container">
+                  <button
+                    onClick={() => setAdminMenuOpen(!adminMenuOpen)}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
+                      (currentView === 'small-council' || currentView === 'club-nps-scores')
+                        ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                        : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Shield className="h-4 w-4" />
+                      <span>Admin</span>
+                    </div>
+                    <svg
+                      className={`w-4 h-4 transform transition-transform ${adminMenuOpen ? 'rotate-180' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  
+                  {adminMenuOpen && (
+                    <div className="absolute left-0 top-full mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-50 ml-4 space-y-1">
+                      <button
+                        onClick={() => {
+                          updateCurrentView('small-council');
+                          setAdminMenuOpen(false);
+                          setHamburgerMenuOpen(false);
+                        }}
+                        className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors duration-200 text-sm ${
+                          currentView === 'small-council' 
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                            : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <Shield className="h-4 w-4" />
+                        <span>Action Items</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => {
+                          updateCurrentView('club-nps-scores');
+                          setAdminMenuOpen(false);
+                          setHamburgerMenuOpen(false);
+                        }}
+                        className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors duration-200 text-sm ${
+                          currentView === 'club-nps-scores' 
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                            : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <BarChart3 className="h-4 w-4" />
+                        <span>Club NPS Scores</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
               
               {/* Divider */}
@@ -1078,7 +1138,7 @@ const CoachDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       {/* Header */}
       <div className="bg-white/90 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -1090,7 +1150,7 @@ const CoachDashboard = () => {
                   e.stopPropagation();
                   setHamburgerMenuOpen(!hamburgerMenuOpen);
                 }}
-                className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 hamburger-menu relative z-20 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                    className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 hamburger-menu relative z-20 min-w-[44px] min-h-[44px] flex items-center justify-center"
                 style={{ pointerEvents: 'auto' }}
               >
                 {hamburgerMenuOpen ? (
@@ -1121,7 +1181,7 @@ const CoachDashboard = () => {
       </div>
 
       {/* Permanent Sidebar Navigation */}
-      <div className={`fixed top-14 sm:top-16 left-0 bg-white border-r border-gray-200 shadow-lg transition-transform duration-300 z-50 ${
+      <div className={`fixed top-14 sm:top-16 left-0 bg-white border-r border-gray-200 shadow-lg transition-transform duration-300 z-50 sidebar-nav ${
         hamburgerMenuOpen ? 'translate-x-0' : '-translate-x-full'
       }`} style={{ width: '240px', height: 'auto', maxHeight: 'calc(100vh - 4rem)' }}>
         <div className="flex flex-col">
@@ -1216,20 +1276,65 @@ const CoachDashboard = () => {
             </button>
             
             {isAdmin() && (
-              <button
-                            onClick={() => {
-              updateCurrentView('small-council');
-              setHamburgerMenuOpen(false);
-            }}
-                className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
-                  currentView === 'small-council' 
-                    ? 'bg-blue-50 text-blue-700 border border-blue-200' 
-                    : 'text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <Shield className="h-4 w-4" />
-                <span>Admin</span>
-              </button>
+              <div className="relative admin-menu-container">
+                <button
+                  onClick={() => setAdminMenuOpen(!adminMenuOpen)}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
+                    (currentView === 'small-council' || currentView === 'club-nps-scores')
+                      ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center space-x-3">
+                    <Shield className="h-4 w-4" />
+                    <span>Admin</span>
+                  </div>
+                  <svg
+                    className={`w-4 h-4 transform transition-transform ${adminMenuOpen ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                
+                {adminMenuOpen && (
+                  <div className="absolute left-0 top-full mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-50 ml-4 space-y-1">
+                      <button
+                        onClick={() => {
+                          updateCurrentView('small-council');
+                          setAdminMenuOpen(false);
+                          setHamburgerMenuOpen(false);
+                        }}
+                        className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors duration-200 text-sm ${
+                          currentView === 'small-council' 
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                            : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <Shield className="h-4 w-4" />
+                        <span>Action Items</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => {
+                          updateCurrentView('club-nps-scores');
+                          setAdminMenuOpen(false);
+                          setHamburgerMenuOpen(false);
+                        }}
+                        className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors duration-200 text-sm ${
+                          currentView === 'club-nps-scores' 
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                            : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <BarChart3 className="h-4 w-4" />
+                        <span>Club NPS Scores</span>
+                      </button>
+                  </div>
+                )}
+              </div>
             )}
             
             {/* Divider */}
@@ -1529,6 +1634,8 @@ const CoachDashboard = () => {
         <CoachInsights />
       ) : currentView === 'nps-scores' ? (
         <NPSScores />
+      ) : currentView === 'club-nps-scores' ? (
+        <ClubNPSScores />
       ) : currentView === 'small-council' ? (
         <SmallCouncil coachEmail={coachEmail} currentSeason={currentSeason} />
       ) : (

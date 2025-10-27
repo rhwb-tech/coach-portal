@@ -54,7 +54,8 @@ const KnowYourRunner = ({
   const [raceTimingsFormData, setRaceTimingsFormData] = useState({
     race_timings: '',
     race_pr: false,
-    race_comments: ''
+    race_comments: '',
+    race_distance_completed: ''
   });
   const [raceTimingsMessage, setRaceTimingsMessage] = useState({ type: '', text: '' });
   const [raceTimingsValidation, setRaceTimingsValidation] = useState({ race_timings: '' });
@@ -274,7 +275,7 @@ const KnowYourRunner = ({
     try {
       const { data, error } = await supabase
         .from('runner_season_info')
-        .select('race_timings, race_pr, race_comments')
+        .select('race_timings, race_pr, race_comments, race_distance, race_distance_completed')
         .eq('email_id', runnerEmail)
         .eq('season', seasonFilter)
         .single();
@@ -288,7 +289,8 @@ const KnowYourRunner = ({
         setRaceTimingsFormData({
           race_timings: data?.race_timings || '',
           race_pr: data?.race_pr === true || data?.race_pr === 'true' || false,
-          race_comments: data?.race_comments || ''
+          race_comments: data?.race_comments || '',
+          race_distance_completed: data?.race_distance_completed || data?.race_distance || ''
         });
       }
     } catch (error) {
@@ -443,7 +445,8 @@ const KnowYourRunner = ({
           .update({
             race_timings: raceTimingsFormData.race_timings || null,
             race_pr: raceTimingsFormData.race_pr || null,
-            race_comments: raceTimingsFormData.race_comments || null
+            race_comments: raceTimingsFormData.race_comments || null,
+            race_distance_completed: raceTimingsFormData.race_distance_completed || null
           })
           .eq('email_id', selectedRunner.email_id)
           .eq('season', seasonFilter);
@@ -458,7 +461,8 @@ const KnowYourRunner = ({
             season: seasonFilter,
             race_timings: raceTimingsFormData.race_timings || null,
             race_pr: raceTimingsFormData.race_pr || null,
-            race_comments: raceTimingsFormData.race_comments || null
+            race_comments: raceTimingsFormData.race_comments || null,
+            race_distance_completed: raceTimingsFormData.race_distance_completed || null
           }]);
 
         if (error) throw error;
@@ -468,7 +472,8 @@ const KnowYourRunner = ({
       setRaceTimings({
         race_timings: raceTimingsFormData.race_timings,
         race_pr: raceTimingsFormData.race_pr,
-        race_comments: raceTimingsFormData.race_comments
+        race_comments: raceTimingsFormData.race_comments,
+        race_distance_completed: raceTimingsFormData.race_distance_completed
       });
 
       // Reset edit state
@@ -494,7 +499,8 @@ const KnowYourRunner = ({
     setRaceTimingsFormData({
       race_timings: raceTimings?.race_timings || '',
       race_pr: raceTimings?.race_pr === true || raceTimings?.race_pr === 'true' || false,
-      race_comments: raceTimings?.race_comments || ''
+      race_comments: raceTimings?.race_comments || '',
+      race_distance_completed: raceTimings?.race_distance_completed || raceTimings?.race_distance || ''
     });
   };
 
@@ -1504,8 +1510,8 @@ const KnowYourRunner = ({
 
                               {/* Race Timings Form */}
                               <div className="space-y-4">
-                                {/* Race Timings and PR in same row */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Race Timings, PR, and Race Distance in same row */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                   {/* Race Timings */}
                                   <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Race Timings</label>
@@ -1559,6 +1565,29 @@ const KnowYourRunner = ({
                                       </div>
                                     )}
                                   </div>
+
+                                  {/* Race Distance */}
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Race Distance</label>
+                                    {editingRaceTimings ? (
+                                      <select
+                                        value={raceTimingsFormData.race_distance_completed}
+                                        onChange={(e) => handleRaceTimingsFormChange('race_distance_completed', e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                      >
+                                        <option value="">Select Race Distance</option>
+                                        <option value="5K">5K</option>
+                                        <option value="10K">10K</option>
+                                        <option value="Half Marathon">Half Marathon</option>
+                                        <option value="Marathon">Marathon</option>
+                                        <option value="Other">Other</option>
+                                      </select>
+                                    ) : (
+                                      <div className="text-sm text-gray-900 bg-gray-50 p-3 rounded-lg min-h-[40px] flex items-center">
+                                        {raceTimings?.race_distance_completed || raceTimings?.race_distance || 'No race distance recorded'}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
 
                                 {/* Race Comments - Full width */}
@@ -1577,6 +1606,22 @@ const KnowYourRunner = ({
                                       {raceTimings?.race_comments || 'No race comments recorded'}
                                     </div>
                                   )}
+                                </div>
+
+                                {/* Helpful message for coaches */}
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-4">
+                                  <div className="flex items-start space-x-2">
+                                    <div className="flex-shrink-0">
+                                      <svg className="h-4 w-4 text-blue-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                      </svg>
+                                    </div>
+                                    <div className="text-sm text-blue-800">
+                                      <p className="font-medium mb-1">Race Timing Guidelines:</p>
+                                      <p>For races with a timing chip, record the official chip time. You can verify it from the race results or ask the runner for a screenshot as proof.</p>
+                                      <p className="mt-2">For races without a timing chip (e.g., logged in Strava or Final Surge), record the elapsed time, not the moving time.</p>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                             </div>

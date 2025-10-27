@@ -236,7 +236,7 @@ export default function NPSDashboard() {
               avgScore={overallAvg?.rel}
             />
             <MetricCard 
-              label="Coach Overall NPS" 
+              label="Recommendation" 
               newScore={newRunner?.reco_nps || 0}
               returnScore={returnRunner?.reco_nps || 0}
               borderColor="border-blue-500"
@@ -264,7 +264,7 @@ export default function NPSDashboard() {
               avgScore={overallAvg?.rhwb_knowledge}
             />
             <MetricCard 
-              label="RHWB Overall NPS" 
+              label="Recommendation" 
               newScore={newRunner?.rhwb_reco_nps || 0}
               returnScore={returnRunner?.rhwb_reco_nps || 0}
               borderColor="border-purple-500"
