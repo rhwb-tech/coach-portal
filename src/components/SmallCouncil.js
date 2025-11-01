@@ -282,18 +282,12 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
           updateData = { race_distance: transferRequest.new_program };
         }
 
-        // Update or insert record in runner_season_info
-        const upsertData = {
-          season: currentSeason,
-          email_id: transferRequest.runner_email_id,
-          ...updateData
-        };
-
+        // Update record in runner_season_info (season is used only to filter, not to update)
         const { error: runnerUpdateError } = await supabase
           .from('runner_season_info')
-          .upsert(upsertData, {
-            onConflict: 'season,email_id'
-          });
+          .update(updateData)
+          .eq('season', currentSeason)
+          .eq('email_id', transferRequest.runner_email_id);
 
         if (runnerUpdateError) {
           console.error('Error updating runner season info:', runnerUpdateError);
@@ -322,17 +316,12 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
           return;
         }
 
-        const upsertData = {
-          season: currentSeason,
-          email_id: transferRequest.runner_email_id,
-          coach: 'ZZ. Exit'
-        };
-
+        // Update record in runner_season_info (season is used only to filter, not to update)
         const { error: deferralUpdateError } = await supabase
           .from('runner_season_info')
-          .upsert(upsertData, {
-            onConflict: 'season,email_id'
-          });
+          .update({ coach: 'ZZ. Exit' })
+          .eq('season', currentSeason)
+          .eq('email_id', transferRequest.runner_email_id);
 
         if (deferralUpdateError) {
           console.error('Error updating runner season info for deferral:', deferralUpdateError);

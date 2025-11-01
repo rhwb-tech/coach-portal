@@ -154,14 +154,27 @@ const CoachDashboard = () => {
       try {
         const { data, error } = await supabase
           .from('rhwb_seasons')
-          .select('id')
+          .select('id, season')
           .eq('current', true)
           .single();
 
+        if (error) {
+          console.error('Failed to fetch current season:', error);
+          // Log RLS policy errors specifically for debugging
+          if (error.message?.includes('row-level security') || error.message?.includes('policy')) {
+            console.error('RLS Policy Error: User may not have permissions to read rhwb_seasons table');
+          }
+          return;
+        }
 
-
-        if (!error && data) {
+        if (data) {
           setSeason(data.id);
+          // Also set currentSeason for use in SmallCouncil and other components
+          if (data.season) {
+            setCurrentSeason(data.season);
+          } else {
+            console.warn('Current season data found but season field is null:', data);
+          }
         }
       } catch (error) {
         console.error('Failed to fetch current season:', error);
