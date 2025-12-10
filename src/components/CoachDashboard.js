@@ -39,6 +39,8 @@ const CoachDashboard = () => {
   const [cohortLoading, setCohortLoading] = useState(false);
   const [cohortError, setCohortError] = useState(null);
   const [currentSeason, setCurrentSeason] = useState(null);
+  const [availableSeasons, setAvailableSeasons] = useState([]);
+  const [selectedSeason, setSelectedSeason] = useState(null);
   const [cohortFilterOptions, setCohortFilterOptions] = useState({
     distances: []
   });
@@ -212,32 +214,43 @@ const CoachDashboard = () => {
     loadCoachName();
   }, [coachEmail, user?.name]);
 
-  // Load cohort data when switching to Know Your Runner view
+  // Fetch all available seasons and set default to current season
+  useEffect(() => {
+    const fetchSeasons = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('rhwb_seasons')
+          .select('season, current')
+          .order('season', { ascending: false });
+
+        if (!error && data) {
+          setAvailableSeasons(data);
+
+          // Find and set current season as default
+          const currentSeasonData = data.find(s => s.current === true);
+          if (currentSeasonData && !selectedSeason) {
+            setSelectedSeason(currentSeasonData.season);
+            setCurrentSeason(currentSeasonData.season);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching seasons:', error);
+      }
+    };
+
+    fetchSeasons();
+  }, []);
+
+  // Load cohort data when switching to Know Your Runner view or when season changes
   useEffect(() => {
     const loadCohortData = async () => {
-      if (currentView !== 'know-your-runner' || !coachEmail) {
+      if (currentView !== 'know-your-runner' || !coachEmail || !selectedSeason) {
         return;
       }
-      
+
       try {
         setCohortLoading(true);
         setCohortError(null);
-        
-        // Query 1: Get current season from rhwb_seasons table
-        const { data: seasonData, error: seasonError } = await supabase
-          .from('rhwb_seasons')
-          .select('season')
-          .eq('current', true)
-          .single();
-        
-        if (seasonError || !seasonData) {
-          console.error('Failed to fetch current season:', seasonError);
-          setCohortData([]);
-          return;
-        }
-        
-        const currentSeasonValue = seasonData.season;
-        setCurrentSeason(currentSeasonValue);
         
         // Query 2: Get coach name from v_rhwb_roles view
         const { data: coachData, error: coachError } = await supabase
@@ -253,12 +266,12 @@ const CoachDashboard = () => {
         }
         
         const coachNameValue = coachData.full_name;
-        
-        // Query 3: Get the season info for the coach using current season
+
+        // Query 3: Get the season info for the coach using selected season
         const { data: runnerSeasonData, error: runnerSeasonError } = await supabase
           .from('runner_season_info')
           .select('email_id, race_distance, coach, season')
-          .eq('season', currentSeasonValue)
+          .eq('season', selectedSeason)
           .eq('coach', coachNameValue);
         
         if (runnerSeasonError || !runnerSeasonData || runnerSeasonData.length === 0) {
@@ -273,7 +286,7 @@ const CoachDashboard = () => {
         // Query 4: Fetch runner profiles for these email IDs
         const { data: profileData, error: profileError } = await supabase
           .from('runners_profile')
-          .select('email_id, runner_name, gender, phone_no, dob, city, state, notes_present')
+          .select('email_id, runner_name, first_name, last_name, gender, phone_no, dob, city, state, notes_present')
           .in('email_id', emailIds);
         
         // Combine the data
@@ -294,6 +307,8 @@ const CoachDashboard = () => {
             
             return {
               runner_name: runner.runners_profile?.runner_name,
+              first_name: runner.runners_profile?.first_name,
+              last_name: runner.runners_profile?.last_name,
               gender: runner.runners_profile?.gender,
               phone_no: runner.runners_profile?.phone_no,
               age: age,
@@ -332,7 +347,7 @@ const CoachDashboard = () => {
     };
 
     loadCohortData();
-  }, [currentView, coachEmail]);
+  }, [currentView, coachEmail, selectedSeason]);
 
   // Listen for notes updates to refresh cohort data
   useEffect(() => {
@@ -341,28 +356,12 @@ const CoachDashboard = () => {
       if (currentView === 'know-your-runner') {
         // Trigger a reload of cohort data
         const loadCohortData = async () => {
-          if (!coachEmail) return;
-          
+          if (!coachEmail || !selectedSeason) return;
+
           try {
             setCohortLoading(true);
             setCohortError(null);
-            
-            // Query 1: Get current season from rhwb_seasons table
-            const { data: seasonData, error: seasonError } = await supabase
-              .from('rhwb_seasons')
-              .select('season')
-              .eq('current', true)
-              .single();
-            
-            if (seasonError || !seasonData) {
-              console.error('Failed to fetch current season:', seasonError);
-              setCohortData([]);
-              return;
-            }
-            
-            const currentSeasonValue = seasonData.season;
-            setCurrentSeason(currentSeasonValue);
-            
+
             // Query 2: Get coach name from v_rhwb_roles view
             const { data: coachData, error: coachError } = await supabase
               .from('v_rhwb_roles')
@@ -376,12 +375,12 @@ const CoachDashboard = () => {
             }
             
             const coachNameValue = coachData.full_name;
-            
-            // Query 3: Get the season info for the coach using current season
+
+            // Query 3: Get the season info for the coach using selected season
             const { data: runnerSeasonData, error: runnerSeasonError } = await supabase
               .from('runner_season_info')
               .select('email_id, race_distance, coach, season')
-              .eq('season', currentSeasonValue)
+              .eq('season', selectedSeason)
               .eq('coach', coachNameValue);
             
             if (runnerSeasonError || !runnerSeasonData || runnerSeasonData.length === 0) {
@@ -395,7 +394,7 @@ const CoachDashboard = () => {
             // Query 4: Fetch runner profiles for these email IDs
             const { data: profileData, error: profileError } = await supabase
               .from('runners_profile')
-              .select('email_id, runner_name, gender, phone_no, dob, city, state, notes_present')
+              .select('email_id, runner_name, first_name, last_name, gender, phone_no, dob, city, state, notes_present')
               .in('email_id', emailIds);
             
             // Combine the data
@@ -416,6 +415,8 @@ const CoachDashboard = () => {
                 
                 return {
                   runner_name: runner.runners_profile?.runner_name,
+                  first_name: runner.runners_profile?.first_name,
+                  last_name: runner.runners_profile?.last_name,
                   gender: runner.runners_profile?.gender,
                   phone_no: runner.runners_profile?.phone_no,
                   age: age,
@@ -1652,7 +1653,7 @@ const CoachDashboard = () => {
       ) : currentView === 'small-council' ? (
         <SmallCouncil coachEmail={coachEmail} currentSeason={currentSeason} />
       ) : (
-        <KnowYourRunner 
+        <KnowYourRunner
           cohortData={cohortData}
           cohortLoading={cohortLoading}
           cohortError={cohortError}
@@ -1662,6 +1663,9 @@ const CoachDashboard = () => {
           setSearchTerm={setSearchTerm}
           filterOptions={cohortFilterOptions}
           currentSeason={currentSeason}
+          availableSeasons={availableSeasons}
+          selectedSeason={selectedSeason}
+          setSelectedSeason={setSelectedSeason}
           coachEmail={coachEmail}
         />
       )}

@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, Search, Users, Edit, Users as FamilyIcon, Clock, FileText, TrendingUp, Plus, MessageCircle, Mail, Copy, Check } from 'lucide-react';
+import { ChevronDown, Search, Users, Edit, Users as FamilyIcon, Clock, FileText, TrendingUp, Plus, MessageCircle, Mail, Copy, Check, UserPlus } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 import RunnerCoachNotes from './RunnerCoachNotes';
 import RunnerFamilyMembers from './RunnerFamilyMembers';
 import RunnerClubHistory from './RunnerClubHistory';
 import RunnerOnboardingSurvey from './RunnerOnboardingSurvey';
 
-const KnowYourRunner = ({ 
-  cohortData = [], 
-  cohortLoading = false, 
+const KnowYourRunner = ({
+  cohortData = [],
+  cohortLoading = false,
   cohortError = null,
   selectedDistance = 'All',
   setSelectedDistance,
@@ -16,9 +16,13 @@ const KnowYourRunner = ({
   setSearchTerm,
   filterOptions = { distances: [] },
   currentSeason = null,
+  availableSeasons = [],
+  selectedSeason = null,
+  setSelectedSeason,
   coachEmail = null
 }) => {
   const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const [seasonMenuOpen, setSeasonMenuOpen] = useState(false);
   const [distanceMenuOpen, setDistanceMenuOpen] = useState(false);
   const [transferDistanceMenuOpen, setTransferDistanceMenuOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState({});
@@ -120,6 +124,7 @@ const KnowYourRunner = ({
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (!event.target.closest('.filter-dropdown') && !event.target.closest('.search-container')) {
+        setSeasonMenuOpen(false);
         setDistanceMenuOpen(false);
         setShowAutocomplete(false);
       }
@@ -510,7 +515,7 @@ const KnowYourRunner = ({
       await navigator.clipboard.writeText(text);
       const key = `${runnerId}-${type}`;
       setCopiedItems(prev => ({ ...prev, [key]: true }));
-      
+
       // Reset the copied state after 2 seconds
       setTimeout(() => {
         setCopiedItems(prev => ({ ...prev, [key]: false }));
@@ -518,6 +523,35 @@ const KnowYourRunner = ({
     } catch (err) {
       console.error('Failed to copy to clipboard:', err);
     }
+  };
+
+  // Generate and download VCF file
+  const downloadVCF = (runner) => {
+    const firstName = runner.first_name || '';
+    const lastName = runner.last_name || '';
+    const fullName = runner.runner_name || `${firstName} ${lastName}`.trim() || 'Unknown';
+
+    // Create VCF content
+    const vcfContent = [
+      'BEGIN:VCARD',
+      'VERSION:3.0',
+      `FN:${fullName}`,
+      `N:${lastName};${firstName};;;`,
+      `TEL;TYPE=CELL:${runner.phone_no || ''}`,
+      'ORG:RHWB',
+      'END:VCARD'
+    ].join('\n');
+
+    // Create blob and download
+    const blob = new Blob([vcfContent], { type: 'text/vcard' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${fullName}.vcf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
   };
 
   // Handle runner selection
@@ -786,6 +820,36 @@ const KnowYourRunner = ({
           <div className="flex flex-col gap-3 sm:gap-4">
             {/* Filter Chips */}
             <div className="flex flex-wrap gap-2 sm:gap-4 items-center">
+              {/* Season Chip */}
+              <div className="relative filter-dropdown z-50">
+                <button
+                  onClick={() => setSeasonMenuOpen(!seasonMenuOpen)}
+                  className="flex items-center space-x-1 sm:space-x-2 px-3 sm:px-4 py-2 bg-purple-50 text-purple-700 rounded-full font-medium hover:bg-purple-100 transition-colors duration-200 border border-purple-200 text-sm sm:text-base"
+                >
+                  <span>{selectedSeason || 'Select Season'}</span>
+                  <ChevronDown className={`h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-200 ${seasonMenuOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {seasonMenuOpen && (
+                  <div className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50 min-w-[150px] max-h-[300px] overflow-y-auto">
+                    {availableSeasons.map((season) => (
+                      <button
+                        key={season.season}
+                        onClick={() => {
+                          setSelectedSeason(season.season);
+                          setSeasonMenuOpen(false);
+                        }}
+                        className={`w-full text-left px-4 py-2 hover:bg-gray-50 transition-colors ${
+                          selectedSeason === season.season ? 'bg-purple-50 text-purple-700 font-medium' : 'text-gray-700'
+                        }`}
+                      >
+                        {season.season}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Race Distance Chip */}
               <div className="relative filter-dropdown z-40">
                 <button
@@ -795,7 +859,7 @@ const KnowYourRunner = ({
                   <span>{selectedDistance}</span>
                   <ChevronDown className={`h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-200 ${distanceMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
-                
+
                 {distanceMenuOpen && (
                   <div className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50 min-w-[120px]">
                     {distanceOptions.map((option) => (
@@ -936,6 +1000,13 @@ const KnowYourRunner = ({
                                 ) : (
                                   <Copy className="h-3 w-3 sm:h-4 sm:w-4" />
                                 )}
+                              </button>
+                              <button
+                                onClick={() => downloadVCF(runner)}
+                                className="text-blue-500 hover:text-blue-700 transition-colors"
+                                title="Add to Contacts"
+                              >
+                                <UserPlus className="h-3 w-3 sm:h-4 sm:w-4" />
                               </button>
                             </div>
                           )}
@@ -1181,6 +1252,13 @@ const KnowYourRunner = ({
                                       <Copy className="h-4 w-4" />
                                     )}
                                   </button>
+                                  <button
+                                    onClick={() => downloadVCF(runner)}
+                                    className="text-blue-500 hover:text-blue-700 transition-colors"
+                                    title="Add to Contacts"
+                                  >
+                                    <UserPlus className="h-4 w-4" />
+                                  </button>
                                 </div>
                               )}
                               
@@ -1283,163 +1361,6 @@ const KnowYourRunner = ({
                       {expandedSections.onboarding && (
                         <div className="px-3 sm:px-4 pb-3 sm:pb-4">
                           <RunnerOnboardingSurvey runner={runner} />
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Season Metrics & Performance */}
-                    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                      <button
-                        onClick={() => toggleSection('metrics')}
-                        className="w-full flex items-center justify-between p-3 sm:p-4 hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-center space-x-2 sm:space-x-3">
-                          <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-red-600" />
-                          <span className="font-medium text-gray-900 text-sm sm:text-base">Season Metrics & Performance</span>
-                        </div>
-                        <ChevronDown className={`h-4 w-4 sm:h-5 sm:w-5 text-gray-400 transition-transform duration-200 ${
-                          expandedSections.metrics ? 'rotate-180' : ''
-                        }`} />
-                      </button>
-                      {expandedSections.metrics && (
-                        <div className="px-3 sm:px-4 pb-3 sm:pb-4">
-                          {!selectedRunner ? (
-                            <div className="text-gray-600 text-center py-4">
-                              Select a runner to view their season metrics
-                            </div>
-                          ) : metricsLoading ? (
-                            <div className="text-gray-600 text-center py-4">
-                              Loading metrics...
-                            </div>
-                          ) : seasonMetrics && seasonMetrics.length > 0 ? (
-                            <div className="space-y-6">
-                              {/* Inline message display */}
-                              {editMessage.text && (
-                                <div className={`p-3 rounded-lg text-sm font-medium ${
-                                  editMessage.type === 'success' 
-                                    ? 'bg-green-100 text-green-800 border border-green-200' 
-                                    : 'bg-red-100 text-red-800 border border-red-200'
-                                }`}>
-                                  {editMessage.text}
-                                </div>
-                              )}
-                              
-                              {/* Sort mesos in descending order and limit to 4 */}
-                              {seasonMetrics
-                                .sort((a, b) => {
-                                  // Extract meso number and sort descending
-                                  const mesoA = parseInt(a.meso?.replace(/\D/g, '') || '0');
-                                  const mesoB = parseInt(b.meso?.replace(/\D/g, '') || '0');
-                                  return mesoB - mesoA;
-                                })
-                                .slice(0, 4)
-                                .map((metric, index) => (
-                                  <div key={index} className="bg-gray-50 rounded-lg p-4">
-                                    {/* Meso Section Header */}
-                                    <div className="mb-4 flex items-center justify-between">
-                                      <h4 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2 flex-1">
-                                        {metric.meso || 'Meso N/A'}
-                                      </h4>
-                                      {editingMeso === metric.meso ? (
-                                        <div className="flex space-x-2 ml-4">
-                                          <button
-                                            onClick={handleSaveEdit}
-                                            className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors"
-                                          >
-                                            Save
-                                          </button>
-                                          <button
-                                            onClick={handleCancelEdit}
-                                            className="px-3 py-1 bg-gray-500 text-white text-xs rounded hover:bg-gray-600 transition-colors"
-                                          >
-                                            Cancel
-                                          </button>
-                                        </div>
-                                      ) : (
-                                        <button
-                                          onClick={() => handleEditMeso(metric)}
-                                          className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors ml-4"
-                                        >
-                                          Edit
-                                        </button>
-                                      )}
-                                    </div>
-                                    
-                                    <div className="space-y-4">
-                                      {/* Strength Training & Distance in same row */}
-                                      <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                          <label className="block text-xs font-medium text-gray-600 mb-1">Strength Training</label>
-                                          <div className="text-sm text-gray-900">
-                                            {metric.completed_strength_trains || 0} / {metric.planned_strength_trains || 0}
-                                          </div>
-                                        </div>
-                                        
-                                        <div>
-                                          <label className="block text-xs font-medium text-gray-600 mb-1">Distance</label>
-                                          <div className="text-sm text-gray-900">
-                                            {metric.completed_distance || 0} / {metric.planned_distance || 0}
-                                          </div>
-                                        </div>
-                                      </div>
-                                      
-                                      {/* Meso Scores */}
-                                      <div className="space-y-2">
-                                        <div className="text-xs text-gray-700">
-                                          <span className="font-medium">Calculated Meso Score:</span> {metric.meso_score || 'N/A'}
-                                        </div>
-                                        <div className="text-xs text-gray-700">
-                                          <span className="font-medium">Overridden Meso Score:</span>
-                                          {editingMeso === metric.meso ? (
-                                            <div className="mt-1">
-                                              <input
-                                                type="number"
-                                                step="0.1"
-                                                min="1"
-                                                max="5"
-                                                value={editFormData.meso_score_override || ''}
-                                                onChange={(e) => handleEditFormChange('meso_score_override', e.target.value)}
-                                                className={`w-full px-2 py-1 text-xs border rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
-                                                  editValidationErrors.meso_score_override ? 'border-red-300' : 'border-gray-300'
-                                                }`}
-                                                placeholder="Enter score (1-5)"
-                                              />
-                                              {editValidationErrors.meso_score_override && (
-                                                <div className="text-xs text-red-600 mt-1">
-                                                  {editValidationErrors.meso_score_override}
-                                                </div>
-                                              )}
-                                            </div>
-                                          ) : (
-                                            <span className="ml-1">{metric.meso_score_override || 'N/A'}</span>
-                                          )}
-                                        </div>
-                                        <div className="text-xs text-gray-700">
-                                          <span className="font-medium">Qualitative Score:</span>
-                                          {editingMeso === metric.meso ? (
-                                            <div className="mt-1">
-                                              <input
-                                                type="text"
-                                                value={editFormData.meso_qual_score || ''}
-                                                onChange={(e) => handleEditFormChange('meso_qual_score', e.target.value)}
-                                                className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                                placeholder="Enter qualitative score"
-                                              />
-                                            </div>
-                                          ) : (
-                                            <span className="ml-1">{metric.meso_qual_score || 'N/A'}</span>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                            </div>
-                          ) : (
-                            <div className="text-gray-600 text-center py-4">
-                              No season metrics found for this runner
-                            </div>
-                          )}
                         </div>
                       )}
                     </div>

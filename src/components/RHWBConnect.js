@@ -100,7 +100,7 @@ const DetailItem = ({ icon: Icon, label, value, onCopy, copiedItems, runnerId })
             </button>
           </div>
         ) : (
-          <p className="text-gray-900">{value}</p>
+          <p className="text-gray-900 whitespace-pre-line">{value}</p>
         )}
       </div>
     </div>
@@ -324,7 +324,38 @@ const RunnerDetails = ({ runner, seasonHistory, isLoading, onRunnerSelect }) => 
     );
   }
 
-  const location = [runner.city, runner.state, runner.country].filter(Boolean).join(', ');
+  // Format full address
+  const formatAddress = () => {
+    const parts = [];
+
+    // Add street address on first line if available
+    if (runner.address) {
+      parts.push(runner.address);
+    }
+
+    // Build city, state, zip line
+    const cityStateZip = [];
+    if (runner.city) cityStateZip.push(runner.city);
+    if (runner.state) {
+      const stateZip = [runner.state, runner.zip].filter(Boolean).join(' ');
+      cityStateZip.push(stateZip);
+    } else if (runner.zip) {
+      cityStateZip.push(runner.zip);
+    }
+
+    if (cityStateZip.length > 0) {
+      parts.push(cityStateZip.join(', '));
+    }
+
+    // Add country on last line if available
+    if (runner.country) {
+      parts.push(runner.country);
+    }
+
+    return parts.length > 0 ? parts.join('\n') : null;
+  };
+
+  const location = formatAddress();
 
   return (
     <div className="max-w-4xl mx-auto mt-8">
