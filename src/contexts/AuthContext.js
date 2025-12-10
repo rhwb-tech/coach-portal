@@ -395,19 +395,26 @@ export const AuthProvider = ({ children }) => {
         isProcessingAuthChange.current = true;
         
         try {
-                    // Only process auth state changes for actual auth events, not visibility changes
-          if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
-            // Update session directly instead of using updateSession function
-            setSession(session);
-            
-            // Clear override data when user signs out
-            if (event === 'SIGNED_OUT') {
-              clearOverrideUserRole();
-              // Reset last logged user to allow logging again for new sign-ins
-              lastLoggedUser.current = null;
-            }
+          // Only process auth state changes for actual auth events, not visibility changes
+          if (event !== 'SIGNED_IN' && event !== 'SIGNED_OUT' && event !== 'TOKEN_REFRESHED') {
+            // Ignore other events to prevent clearing user state
+            return;
           }
-        
+
+          // Update session directly instead of using updateSession function
+          setSession(session);
+
+          // Clear override data when user signs out
+          if (event === 'SIGNED_OUT') {
+            clearOverrideUserRole();
+            // Reset last logged user to allow logging again for new sign-ins
+            lastLoggedUser.current = null;
+            // Clear user state and exit early for sign out
+            setUser(null);
+            setIsLoading(false);
+            return;
+          }
+
         // Check for URL parameter override - only process if there's an active session
         const urlParams = new URLSearchParams(window.location.search);
         const overrideEmail = urlParams.get('email');
@@ -475,16 +482,12 @@ export const AuthProvider = ({ children }) => {
             await supabase.auth.signOut();
             setUser(null);
           }
-        } else {
-          // No session and no URL override - clear any existing override data
-          if (!overrideEmail) {
-            clearOverrideUserRole();
-          }
-          
-          // Set user to null for auth state changes
-          setUser(null);
+        } else if (!overrideEmail) {
+          // No session and no URL override - this shouldn't happen for SIGNED_IN or TOKEN_REFRESHED
+          // Only clear override data, don't clear user state (let SIGNED_OUT event handle that)
+          clearOverrideUserRole();
         }
-        
+
         setIsLoading(false);
         setAuthError(null);
         } catch (error) {
