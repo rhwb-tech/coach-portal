@@ -1360,7 +1360,7 @@ const KnowYourRunner = ({
                       </button>
                       {expandedSections.onboarding && (
                         <div className="px-3 sm:px-4 pb-3 sm:pb-4">
-                          <RunnerOnboardingSurvey runner={runner} />
+                          <RunnerOnboardingSurvey runner={runner} selectedSeason={selectedSeason} />
                         </div>
                       )}
                     </div>
