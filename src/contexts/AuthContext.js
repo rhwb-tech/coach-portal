@@ -274,15 +274,6 @@ export const AuthProvider = ({ children }) => {
   
   // Ref to track if initialization has already run
   const hasInitialized = useRef(false);
-  
-  // Helper to update session only if changed
-  const updateSession = useCallback((newSession) => {
-    if (isSessionChanged(session, newSession)) {
-      setSession(newSession);
-    }
-  }, [session]);
-
-
 
   // Helper to log navigation only once per user
   const logNavigationOnce = useCallback((email, event) => {
