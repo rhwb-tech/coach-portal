@@ -74,10 +74,17 @@ const KnowYourRunner = ({
   // Fetch pending action requests from database
   const fetchPendingActionRequests = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('rhwb_action_requests')
         .select('runner_email_id, action_type, status')
         .eq('status', 'pending');
+
+      // Add season filter if selectedSeason is available
+      if (selectedSeason) {
+        query = query.eq('season', selectedSeason);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error('Error fetching pending action requests:', error);
@@ -705,7 +712,8 @@ const KnowYourRunner = ({
         requestor_email_id: coachEmail || 'unknown@example.com',
         comments: transferComment.trim() || null,
         current_program: transferRunner.race_distance,
-        new_program: selectedProgram
+        new_program: selectedProgram,
+        season: selectedSeason || currentSeason
       };
 
       // First, let's test if we can read from the table
@@ -758,7 +766,8 @@ const KnowYourRunner = ({
         runner_email_id: deferRunner.email_id,
         requestor_email_id: coachEmail || 'unknown@example.com',
         comments: deferComment.trim() || null,
-        status: 'pending'
+        status: 'pending',
+        season: selectedSeason || currentSeason
       };
 
       // First, let's test if we can read from the table

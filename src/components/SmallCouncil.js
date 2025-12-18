@@ -58,6 +58,11 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
         .eq('action_type', 'Transfer Runner')
         .order('created_at', { ascending: false });
 
+      // Apply season filter if currentSeason is available
+      if (currentSeason) {
+        transferQuery = transferQuery.eq('season', currentSeason);
+      }
+
       // Apply status filter if not showing completed
       if (!showCompleted) {
         transferQuery = transferQuery.eq('status', 'pending');
@@ -76,6 +81,11 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
         .select('*')
         .eq('action_type', 'Defer Runner')
         .order('created_at', { ascending: false });
+
+      // Apply season filter if currentSeason is available
+      if (currentSeason) {
+        deferralQuery = deferralQuery.eq('season', currentSeason);
+      }
 
       // Apply status filter if not showing completed
       if (!showCompleted) {
