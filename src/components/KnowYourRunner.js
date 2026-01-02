@@ -195,7 +195,7 @@ const KnowYourRunner = ({
     }
     
     // If opening race timings section and we have a selected runner, fetch the data
-    if (sectionName === 'raceTimings' && selectedRunner && currentSeason) {
+    if (sectionName === 'raceTimings' && selectedRunner && selectedSeason) {
       fetchRaceTimings(selectedRunner.email_id);
     }
   };
@@ -277,12 +277,12 @@ const KnowYourRunner = ({
 
   // Fetch race timings for a specific runner
   const fetchRaceTimings = async (runnerEmail) => {
-    if (!runnerEmail || !currentSeason) return;
+    if (!runnerEmail || !selectedSeason) return;
     
     setRaceTimingsLoading(true);
     
     // Get season filter
-    const seasonFilter = currentSeason.toString().startsWith('Season ') ? currentSeason : `Season ${currentSeason}`;
+    const seasonFilter = selectedSeason.toString().startsWith('Season ') ? selectedSeason : `Season ${selectedSeason}`;
     
     try {
       const { data, error } = await supabase
@@ -430,7 +430,7 @@ const KnowYourRunner = ({
 
   // Handle save race timings
   const handleSaveRaceTimings = async () => {
-    if (!selectedRunner || !currentSeason) return;
+    if (!selectedRunner || !selectedSeason) return;
 
     // Validate race timings before saving
     const timingsValidation = validateRaceTimings(raceTimingsFormData.race_timings);
@@ -440,7 +440,7 @@ const KnowYourRunner = ({
     }
 
     try {
-      const seasonFilter = currentSeason.toString().startsWith('Season ') ? currentSeason : `Season ${currentSeason}`;
+      const seasonFilter = selectedSeason.toString().startsWith('Season ') ? selectedSeason : `Season ${selectedSeason}`;
       
       // Check if record exists
       const { data: existingData } = await supabase
@@ -713,7 +713,7 @@ const KnowYourRunner = ({
         comments: transferComment.trim() || null,
         current_program: transferRunner.race_distance,
         new_program: selectedProgram,
-        season: selectedSeason || currentSeason
+        season: selectedSeason
       };
 
       // First, let's test if we can read from the table
@@ -767,7 +767,7 @@ const KnowYourRunner = ({
         requestor_email_id: coachEmail || 'unknown@example.com',
         comments: deferComment.trim() || null,
         status: 'pending',
-        season: selectedSeason || currentSeason
+        season: selectedSeason
       };
 
       // First, let's test if we can read from the table
