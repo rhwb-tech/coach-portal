@@ -44,6 +44,8 @@ const CoachDashboard = () => {
   const [cohortFilterOptions, setCohortFilterOptions] = useState({
     distances: []
   });
+  const [adminRoleEnabled, setAdminRoleEnabled] = useState(false);
+  const [selectedAdminCoachName, setSelectedAdminCoachName] = useState(null);
   
   // Dropdown menu states
   const [distanceMenuOpen, setDistanceMenuOpen] = useState(false);
@@ -244,28 +246,54 @@ const CoachDashboard = () => {
   // Load cohort data when switching to Know Your Runner view or when season changes
   useEffect(() => {
     const loadCohortData = async () => {
-      if (currentView !== 'know-your-runner' || !coachEmail || !selectedSeason) {
+      if (currentView !== 'know-your-runner' || !selectedSeason) {
         return;
       }
 
+      // Determine which coach to use: admin selected coach name or get current user's coach name
+      let coachNameValue;
+      
+      if (adminRoleEnabled && selectedAdminCoachName) {
+        // Use the selected coach name directly
+        coachNameValue = selectedAdminCoachName;
+      } else {
+        // Get coach name from v_rhwb_roles view for current user
+        if (!coachEmail) {
+          return;
+        }
+        
+        try {
+          setCohortLoading(true);
+          setCohortError(null);
+          
+          const { data: coachData, error: coachError } = await supabase
+            .from('v_rhwb_roles')
+            .select('full_name')
+            .eq('email_id', coachEmail.toLowerCase())
+            .single();
+          
+          if (coachError || !coachData) {
+            console.error('Failed to fetch coach data:', coachError);
+            setCohortData([]);
+            return;
+          }
+          
+          coachNameValue = coachData.full_name;
+        } catch (error) {
+          console.error('Error fetching coach name:', error);
+          setCohortData([]);
+          return;
+        }
+      }
+      
       try {
-        setCohortLoading(true);
-        setCohortError(null);
-        
-        // Query 2: Get coach name from v_rhwb_roles view
-        const { data: coachData, error: coachError } = await supabase
-          .from('v_rhwb_roles')
-          .select('full_name')
-          .eq('email_id', coachEmail.toLowerCase())
-          .single();
-        
-        if (coachError || !coachData) {
-          console.error('Failed to fetch coach data:', coachError);
+        if (!coachNameValue) {
           setCohortData([]);
           return;
         }
         
-        const coachNameValue = coachData.full_name;
+        setCohortLoading(true);
+        setCohortError(null);
 
         // Query 3: Get the season info for the coach using selected season
         const { data: runnerSeasonData, error: runnerSeasonError } = await supabase
@@ -347,7 +375,7 @@ const CoachDashboard = () => {
     };
 
     loadCohortData();
-  }, [currentView, coachEmail, selectedSeason]);
+  }, [currentView, coachEmail, selectedSeason, adminRoleEnabled, selectedAdminCoachName]);
 
   // Listen for notes updates to refresh cohort data
   useEffect(() => {
@@ -356,13 +384,15 @@ const CoachDashboard = () => {
       if (currentView === 'know-your-runner') {
         // Trigger a reload of cohort data
         const loadCohortData = async () => {
-          if (!coachEmail || !selectedSeason) return;
-
-          try {
-            setCohortLoading(true);
-            setCohortError(null);
-
-            // Query 2: Get coach name from v_rhwb_roles view
+          let coachNameValue;
+          
+          if (adminRoleEnabled && selectedAdminCoachName) {
+            // Use the selected coach name directly
+            coachNameValue = selectedAdminCoachName;
+          } else {
+            // Get coach name from v_rhwb_roles view for current user
+            if (!coachEmail || !selectedSeason) return;
+            
             const { data: coachData, error: coachError } = await supabase
               .from('v_rhwb_roles')
               .select('full_name')
@@ -374,7 +404,14 @@ const CoachDashboard = () => {
               return;
             }
             
-            const coachNameValue = coachData.full_name;
+            coachNameValue = coachData.full_name;
+          }
+          
+          if (!coachNameValue || !selectedSeason) return;
+
+          try {
+            setCohortLoading(true);
+            setCohortError(null);
 
             // Query 3: Get the season info for the coach using selected season
             const { data: runnerSeasonData, error: runnerSeasonError } = await supabase
@@ -1667,6 +1704,17 @@ const CoachDashboard = () => {
           selectedSeason={selectedSeason}
           setSelectedSeason={setSelectedSeason}
           coachEmail={coachEmail}
+          isAdmin={isAdmin()}
+          adminRoleEnabled={adminRoleEnabled}
+          onAdminCoachChange={(coachName) => {
+            setSelectedAdminCoachName(coachName);
+          }}
+          onAdminRoleToggle={(enabled) => {
+            setAdminRoleEnabled(enabled);
+            if (!enabled) {
+              setSelectedAdminCoachName(null);
+            }
+          }}
         />
       )}
 

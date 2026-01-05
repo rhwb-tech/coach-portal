@@ -583,7 +583,15 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
                           {/* Transfer Details - Responsive layout */}
                           <div className="mb-2">
                             <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">
-                              <span className="font-medium">Transfer:</span> {request.current_program || 'Unknown'} → {request.new_program || 'Unknown'}
+                              <span className="font-medium">Transfer:</span> {request.current_program || 'Unknown'}
+                              {request.current_program_level && (
+                                <span className="text-gray-500"> ({request.current_program_level})</span>
+                              )}
+                              <span> → </span>
+                              {request.new_program || 'Unknown'}
+                              {request.new_program_level && (
+                                <span className="text-gray-500"> ({request.new_program_level})</span>
+                              )}
                               <span className="hidden sm:inline"> • </span>
                               <br className="sm:hidden" />
                               <span className="font-medium">Requested by:</span> {coachName || request.requestor_email_id}

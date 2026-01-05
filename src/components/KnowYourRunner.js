@@ -19,19 +19,27 @@ const KnowYourRunner = ({
   availableSeasons = [],
   selectedSeason = null,
   setSelectedSeason,
-  coachEmail = null
+  coachEmail = null,
+  isAdmin = false,
+  onAdminCoachChange = null,
+  onAdminRoleToggle = null,
+  adminRoleEnabled: adminRoleEnabledProp = false
 }) => {
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [seasonMenuOpen, setSeasonMenuOpen] = useState(false);
   const [distanceMenuOpen, setDistanceMenuOpen] = useState(false);
   const [transferDistanceMenuOpen, setTransferDistanceMenuOpen] = useState(false);
+  const [coachesMenuOpen, setCoachesMenuOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState({});
   const [selectedRunner, setSelectedRunner] = useState(null);
   const [menuOpenFor, setMenuOpenFor] = useState(null); // Track which runner's menu is open
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [transferRunner, setTransferRunner] = useState(null);
+  const [transferRunnerLevel, setTransferRunnerLevel] = useState(null);
   const [selectedProgram, setSelectedProgram] = useState(null);
+  const [selectedNewLevel, setSelectedNewLevel] = useState(null);
+  const [transferLevelMenuOpen, setTransferLevelMenuOpen] = useState(false);
   const [transferComment, setTransferComment] = useState('');
   const [pendingTransfers, setPendingTransfers] = useState(new Set());
   
@@ -63,6 +71,12 @@ const KnowYourRunner = ({
   });
   const [raceTimingsMessage, setRaceTimingsMessage] = useState({ type: '', text: '' });
   const [raceTimingsValidation, setRaceTimingsValidation] = useState({ race_timings: '' });
+  
+  // Admin role toggle state - use prop if provided, otherwise use local state
+  const [adminRoleEnabledLocal, setAdminRoleEnabledLocal] = useState(false);
+  const adminRoleEnabled = adminRoleEnabledProp !== undefined ? adminRoleEnabledProp : adminRoleEnabledLocal;
+  const [availableCoaches, setAvailableCoaches] = useState([]);
+  const [selectedAdminCoach, setSelectedAdminCoach] = useState(null); // Stores coach name
   
   // Edit state for meso metrics
   const [editingMeso, setEditingMeso] = useState(null);
@@ -115,6 +129,62 @@ const KnowYourRunner = ({
     fetchPendingActionRequests();
   }, []);
 
+  // Load available coaches when admin toggle is enabled and season is selected
+  useEffect(() => {
+    // Clear selected coach when season changes
+    setSelectedAdminCoach(null);
+    if (onAdminCoachChange) {
+      onAdminCoachChange(null);
+    }
+    
+    if (!adminRoleEnabled || !isAdmin || !selectedSeason) {
+      setAvailableCoaches([]);
+      return;
+    }
+
+    const loadCoaches = async () => {
+      try {
+        // Get distinct coaches from runner_season_info for the selected season
+        // Use selectedSeason directly (it should already be in the correct format like "Season 13")
+        console.log('Loading coaches for season:', selectedSeason);
+        
+        const { data, error } = await supabase
+          .from('runner_season_info')
+          .select('coach')
+          .eq('season', selectedSeason);
+        
+        if (error) {
+          console.error('Error loading coaches:', error);
+          console.error('Error details:', error.message, error.details);
+          setAvailableCoaches([]);
+          return;
+        }
+        
+        console.log('Coaches data from runner_season_info:', data);
+        
+        if (data && data.length > 0) {
+          // Get distinct coach names and sort them
+          const distinctCoaches = [...new Set(data.map(item => item.coach).filter(Boolean))].sort((a, b) => 
+            a.localeCompare(b)
+          );
+          
+          console.log('Distinct coaches:', distinctCoaches);
+          
+          // Store coach names directly (no need to lookup email_id)
+          setAvailableCoaches(distinctCoaches);
+        } else {
+          console.log('No coaches found for season:', selectedSeason);
+          setAvailableCoaches([]);
+        }
+      } catch (error) {
+        console.error('Error in loadCoaches:', error);
+        setAvailableCoaches([]);
+      }
+    };
+
+    loadCoaches();
+  }, [adminRoleEnabled, isAdmin, selectedSeason]);
+
   // Refresh pending status when cohort data changes (in case status was updated elsewhere)
   useEffect(() => {
     if (cohortData.length > 0) {
@@ -134,9 +204,13 @@ const KnowYourRunner = ({
         setSeasonMenuOpen(false);
         setDistanceMenuOpen(false);
         setShowAutocomplete(false);
+        setCoachesMenuOpen(false);
       }
       if (!event.target.closest('.runner-menu')) {
         setMenuOpenFor(null);
+      }
+      if (!event.target.closest('.transfer-level-dropdown')) {
+        setTransferLevelMenuOpen(false);
       }
     };
 
@@ -583,10 +657,35 @@ const KnowYourRunner = ({
   };
 
   // Handle transfer runner
-  const handleTransferRunner = (runner) => {
+  const handleTransferRunner = async (runner) => {
     setTransferRunner(runner);
-    setShowTransferModal(true);
     setMenuOpenFor(null); // Close the menu
+    
+    // Fetch the current level from runner_season_info
+    if (runner?.email_id && selectedSeason) {
+      try {
+        const seasonFilter = selectedSeason.toString().startsWith('Season ') ? selectedSeason : `Season ${selectedSeason}`;
+        const { data, error } = await supabase
+          .from('runner_season_info')
+          .select('level')
+          .eq('email_id', runner.email_id)
+          .eq('season', seasonFilter)
+          .single();
+        
+        if (!error && data) {
+          setTransferRunnerLevel(data.level || null);
+        } else {
+          setTransferRunnerLevel(null);
+        }
+      } catch (error) {
+        console.error('Error fetching runner level:', error);
+        setTransferRunnerLevel(null);
+      }
+    } else {
+      setTransferRunnerLevel(null);
+    }
+    
+    setShowTransferModal(true);
   };
 
   // Handle defer runner
@@ -682,6 +781,10 @@ const KnowYourRunner = ({
   // Handle program selection (updates selected program in transfer modal)
   const handleProgramSelection = (newProgram) => {
     setSelectedProgram(newProgram);
+    // Reset level when program changes (Lite doesn't have levels)
+    if (newProgram === 'Lite') {
+      setSelectedNewLevel(null);
+    }
   };
 
   // Handle submit button click (shows confirmation modal)
@@ -690,8 +793,14 @@ const KnowYourRunner = ({
       alert('Please select a program first.');
       return;
     }
+    // For race distance programs, require level selection
+    if (selectedProgram !== 'Lite' && ['5K', '10K', 'Half Marathon', 'Full Marathon'].includes(selectedProgram) && !selectedNewLevel) {
+      alert('Please select a level for the new program.');
+      return;
+    }
     setShowTransferModal(false);
     setTransferDistanceMenuOpen(false);
+    setTransferLevelMenuOpen(false);
     setShowConfirmationModal(true);
   };
 
@@ -712,7 +821,9 @@ const KnowYourRunner = ({
         requestor_email_id: coachEmail || 'unknown@example.com',
         comments: transferComment.trim() || null,
         current_program: transferRunner.race_distance,
+        current_program_level: transferRunnerLevel || null,
         new_program: selectedProgram,
+        new_program_level: selectedNewLevel || null,
         season: selectedSeason
       };
 
@@ -745,9 +856,12 @@ const KnowYourRunner = ({
       // Close modals and reset state
       setShowConfirmationModal(false);
       setTransferRunner(null);
+      setTransferRunnerLevel(null);
       setSelectedProgram(null);
+      setSelectedNewLevel(null);
       setTransferComment('');
       setTransferDistanceMenuOpen(false);
+      setTransferLevelMenuOpen(false);
       
     } catch (error) {
       console.error('Failed to submit transfer request:', error);
@@ -859,6 +973,62 @@ const KnowYourRunner = ({
                 )}
               </div>
 
+              {/* Coaches Dropdown - Only shown when admin toggle is enabled */}
+              {adminRoleEnabled && (
+                <div className="relative filter-dropdown z-50">
+                  <button
+                    onClick={() => {
+                      if (!selectedSeason) {
+                        alert('Please select a season first');
+                        return;
+                      }
+                      setCoachesMenuOpen(!coachesMenuOpen);
+                    }}
+                    disabled={!selectedSeason || availableCoaches.length === 0}
+                    className={`flex items-center space-x-1 sm:space-x-2 px-3 sm:px-4 py-2 rounded-full font-medium transition-colors duration-200 border text-sm sm:text-base ${
+                      !selectedSeason || availableCoaches.length === 0
+                        ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                        : 'bg-green-50 text-green-700 hover:bg-green-100 border-green-200'
+                    }`}
+                  >
+                    <span>
+                      {!selectedSeason 
+                        ? 'Select Season First' 
+                        : selectedAdminCoach 
+                          ? selectedAdminCoach
+                          : availableCoaches.length === 0
+                            ? 'No Coaches'
+                            : 'Select Coach'
+                      }
+                    </span>
+                    <ChevronDown className={`h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-200 ${coachesMenuOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {coachesMenuOpen && selectedSeason && availableCoaches.length > 0 && (
+                    <div className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50 min-w-[200px] max-h-[300px] overflow-y-auto">
+                      {availableCoaches.map((coachName) => (
+                        <button
+                          key={coachName}
+                          onClick={() => {
+                            setSelectedAdminCoach(coachName);
+                            setCoachesMenuOpen(false);
+                            // Notify parent component of coach change (pass coach name)
+                            if (onAdminCoachChange) {
+                              onAdminCoachChange(coachName);
+                            }
+                          }}
+                          className={`w-full text-left px-4 py-2 hover:bg-gray-50 transition-colors ${
+                            selectedAdminCoach === coachName ? 'bg-green-50 text-green-700 font-medium' : 'text-gray-700'
+                          }`}
+                        >
+                          {coachName}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Race Distance Chip */}
               <div className="relative filter-dropdown z-40">
                 <button
@@ -918,6 +1088,39 @@ const KnowYourRunner = ({
                   </div>
                 )}
               </div>
+
+              {/* Admin Role Toggle - Only visible for admin users */}
+              {isAdmin && (
+                <div className="flex items-center gap-2 ml-auto">
+                  <label className="text-sm font-medium text-gray-700">Admin Role</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newValue = !adminRoleEnabled;
+                      if (adminRoleEnabledProp === undefined) {
+                        setAdminRoleEnabledLocal(newValue);
+                      }
+                      if (onAdminRoleToggle) {
+                        onAdminRoleToggle(newValue);
+                      }
+                      if (!newValue) {
+                        setSelectedAdminCoach(null);
+                      }
+                    }}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                      adminRoleEnabled ? 'bg-blue-600' : 'bg-gray-300'
+                    }`}
+                    role="switch"
+                    aria-checked={adminRoleEnabled}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        adminRoleEnabled ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1622,24 +1825,36 @@ const KnowYourRunner = ({
 
       {/* Transfer Program Modal */}
       {showTransferModal && transferRunner && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
             {/* Header */}
-            <div className="flex items-center space-x-3 p-6 border-b border-gray-200">
+            <div className="flex items-center space-x-3 p-6 border-b border-gray-200 flex-shrink-0">
               <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
               </svg>
               <h2 className="text-xl font-bold text-gray-900">Transfer Program</h2>
             </div>
 
-            {/* Content */}
-            <div className="p-6">
+            {/* Content - Scrollable */}
+            <div className="p-6 overflow-y-auto flex-1">
               <p className="text-gray-700 mb-2">
                 Transfer <span className="font-semibold">{transferRunner.runner_name}</span>
               </p>
-              <p className="text-gray-600 mb-4">
-                Current program: <span className="text-blue-600 font-medium">{transferRunner.race_distance}</span>
-              </p>
+              <div className="bg-gray-50 rounded-lg p-4 mb-4 border border-gray-200">
+                <p className="text-sm text-gray-600 mb-2">Current Program Details:</p>
+                <div className="flex items-center space-x-4">
+                  <div>
+                    <span className="text-xs text-gray-500">Race Distance:</span>
+                    <span className="text-blue-600 font-medium ml-2">{transferRunner.race_distance || 'N/A'}</span>
+                  </div>
+                  {transferRunnerLevel && (
+                    <div>
+                      <span className="text-xs text-gray-500">Level:</span>
+                      <span className="text-blue-600 font-medium ml-2">{transferRunnerLevel}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
               <p className="text-gray-700 mb-4">Select a new program:</p>
 
               {/* Program Options */}
@@ -1707,11 +1922,55 @@ const KnowYourRunner = ({
                 </div>
               </div>
 
+              {/* Level Selection - Only show for race distance programs (not Lite) */}
+              {selectedProgram && selectedProgram !== 'Lite' && ['5K', '10K', 'Half Marathon', 'Full Marathon'].includes(selectedProgram) && (
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select Level for {selectedProgram}
+                  </label>
+                  <div className="relative transfer-level-dropdown">
+                    <button
+                      onClick={() => setTransferLevelMenuOpen(!transferLevelMenuOpen)}
+                      className={`w-full flex items-center justify-between p-3 text-left border rounded-lg transition-colors ${
+                        selectedNewLevel
+                          ? 'border-blue-500 bg-blue-50 text-blue-700' 
+                          : 'border-gray-200 hover:bg-gray-50 text-gray-900'
+                      }`}
+                    >
+                      <span className="font-medium">
+                        {selectedNewLevel || 'Select Level'}
+                      </span>
+                      <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${transferLevelMenuOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    
+                    {transferLevelMenuOpen && (
+                      <div className="absolute bottom-full left-0 mb-1 w-full bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                        {['Exp', 'Speed', 'Std'].map((level) => (
+                          <button
+                            key={level}
+                            onClick={() => {
+                              setSelectedNewLevel(level);
+                              setTransferLevelMenuOpen(false);
+                            }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors"
+                          >
+                            {level}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Selected Program Display */}
               {selectedProgram && (
                 <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <p className="text-sm text-blue-700 mb-1">Selected Program:</p>
-                  <p className="font-medium text-blue-900">{selectedProgram}</p>
+                  <p className="font-medium text-blue-900">
+                    {selectedProgram}
+                    {selectedNewLevel && ` (${selectedNewLevel})`}
+                  </p>
                 </div>
               )}
 
@@ -1731,14 +1990,17 @@ const KnowYourRunner = ({
             </div>
 
             {/* Footer */}
-            <div className="flex justify-between p-6 border-t border-gray-200">
+            <div className="flex justify-between p-6 border-t border-gray-200 flex-shrink-0">
               <button
                 onClick={() => {
                   setShowTransferModal(false);
                   setTransferRunner(null);
+                  setTransferRunnerLevel(null);
                   setSelectedProgram(null);
+                  setSelectedNewLevel(null);
                   setTransferComment('');
                   setTransferDistanceMenuOpen(false);
+                  setTransferLevelMenuOpen(false);
                 }}
                 className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
               >
@@ -1779,11 +2041,21 @@ const KnowYourRunner = ({
               <div className="bg-gray-50 rounded-lg p-4 mb-6">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">From:</span>
-                  <span className="font-medium text-gray-900">{transferRunner.race_distance}</span>
+                  <div className="text-right">
+                    <span className="font-medium text-gray-900">{transferRunner.race_distance}</span>
+                    {transferRunnerLevel && (
+                      <span className="text-gray-500 text-sm ml-2">({transferRunnerLevel})</span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex justify-between items-center mt-2">
                   <span className="text-gray-600">To:</span>
-                  <span className="font-medium text-blue-600">{selectedProgram}</span>
+                  <div className="text-right">
+                    <span className="font-medium text-blue-600">{selectedProgram}</span>
+                    {selectedNewLevel && (
+                      <span className="text-gray-500 text-sm ml-2">({selectedNewLevel})</span>
+                    )}
+                  </div>
                 </div>
                 {transferComment.trim() && (
                   <div className="mt-3 pt-3 border-t border-gray-200">
@@ -1800,7 +2072,9 @@ const KnowYourRunner = ({
                 onClick={() => {
                   setShowConfirmationModal(false);
                   setTransferRunner(null);
+                  setTransferRunnerLevel(null);
                   setSelectedProgram(null);
+                  setSelectedNewLevel(null);
                   setTransferComment('');
                 }}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
