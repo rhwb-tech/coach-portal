@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, Search, Users, Edit, Users as FamilyIcon, Clock, FileText, TrendingUp, Plus, MessageCircle, Mail, Copy, Check, UserPlus } from 'lucide-react';
+import { ChevronDown, Search, Users, Edit, Users as FamilyIcon, Clock, FileText, Plus, MessageCircle, Mail, Copy, Check, UserPlus } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 import RunnerCoachNotes from './RunnerCoachNotes';
 import RunnerFamilyMembers from './RunnerFamilyMembers';
@@ -56,7 +56,9 @@ const KnowYourRunner = ({
   const [notesSaved, setNotesSaved] = useState(false);
   
   // Season metrics state
+  // eslint-disable-next-line no-unused-vars
   const [seasonMetrics, setSeasonMetrics] = useState(null);
+  // eslint-disable-next-line no-unused-vars
   const [metricsLoading, setMetricsLoading] = useState(false);
   
   // Race timings state
@@ -82,6 +84,7 @@ const KnowYourRunner = ({
   const [editingMeso, setEditingMeso] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [editValidationErrors, setEditValidationErrors] = useState({});
+  // eslint-disable-next-line no-unused-vars
   const [editMessage, setEditMessage] = useState({ type: '', text: '' });
   const [copiedItems, setCopiedItems] = useState({});
 
@@ -127,6 +130,7 @@ const KnowYourRunner = ({
   // Load pending action requests when component mounts
   useEffect(() => {
     fetchPendingActionRequests();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load available coaches when admin toggle is enabled and season is selected
@@ -136,6 +140,7 @@ const KnowYourRunner = ({
     if (onAdminCoachChange) {
       onAdminCoachChange(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     
     if (!adminRoleEnabled || !isAdmin || !selectedSeason) {
       setAvailableCoaches([]);
@@ -183,6 +188,7 @@ const KnowYourRunner = ({
     };
 
     loadCoaches();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminRoleEnabled, isAdmin, selectedSeason]);
 
   // Refresh pending status when cohort data changes (in case status was updated elsewhere)
@@ -190,9 +196,11 @@ const KnowYourRunner = ({
     if (cohortData.length > 0) {
       fetchPendingActionRequests();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cohortData]);
 
   // Function to refresh pending status (can be called from parent components)
+  // eslint-disable-next-line no-unused-vars
   const refreshPendingStatus = () => {
     fetchPendingActionRequests();
   };
@@ -388,6 +396,7 @@ const KnowYourRunner = ({
   };
 
   // Handle edit button click
+  // eslint-disable-next-line no-unused-vars
   const handleEditMeso = (mesoData) => {
     setEditingMeso(mesoData.meso);
     setEditFormData({
@@ -398,6 +407,7 @@ const KnowYourRunner = ({
   };
 
   // Handle edit form changes
+  // eslint-disable-next-line no-unused-vars
   const handleEditFormChange = (field, value) => {
     setEditFormData(prev => ({ ...prev, [field]: value }));
     
@@ -416,6 +426,7 @@ const KnowYourRunner = ({
   };
 
   // Handle save edit
+  // eslint-disable-next-line no-unused-vars
   const handleSaveEdit = async () => {
     // Validate before saving
     const overrideValidation = validateOverriddenScore(editFormData.meso_score_override);
@@ -478,6 +489,7 @@ const KnowYourRunner = ({
   };
 
   // Handle cancel edit
+  // eslint-disable-next-line no-unused-vars
   const handleCancelEdit = () => {
     setEditingMeso(null);
     setEditFormData({});

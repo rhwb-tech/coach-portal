@@ -131,7 +131,7 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
     } finally {
       setLoading(false);
     }
-  }, [showCompleted, transferRequests.length]);
+  }, [showCompleted, transferRequests.length, currentSeason]);
 
   useEffect(() => {
     // Only load data if we have a valid coachEmail and user is authenticated

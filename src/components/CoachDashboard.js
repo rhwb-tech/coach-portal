@@ -104,6 +104,7 @@ const CoachDashboard = () => {
     if ((currentView === 'small-council' || currentView === 'club-nps-scores') && !isLoading && !isAdmin()) {
       updateCurrentView('know-your-runner');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentView, user?.role, isLoading]);
 
   // Handle page visibility changes to prevent unnecessary re-renders
@@ -241,6 +242,7 @@ const CoachDashboard = () => {
     };
 
     fetchSeasons();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load cohort data when switching to Know Your Runner view or when season changes
@@ -481,7 +483,8 @@ const CoachDashboard = () => {
 
     window.addEventListener('notesUpdated', handleNotesUpdated);
     return () => window.removeEventListener('notesUpdated', handleNotesUpdated);
-  }, [currentView, coachEmail]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentView, coachEmail, adminRoleEnabled, selectedAdminCoachName, selectedSeason]);
   // Load all data and filter options on initial load only (only for Runner Metrics)
   useEffect(() => {
     const loadAllData = async () => {
