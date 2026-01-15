@@ -1,9 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../services/supabaseClient';
-import { useAuth } from '../contexts/AuthContext';
 
 const ClubNPSScores = () => {
-  const { user } = useAuth();
   const [allData, setAllData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -16,14 +14,6 @@ const ClubNPSScores = () => {
     return 'text-gray-700'; // Default color for other values
   };
 
-  const getBgColor = (score) => {
-    if (score > 90) return 'bg-green-800'; // Dark green background
-    if (score >= 50 && score <= 90) return 'bg-green-200'; // Light mint green background
-    if (score >= 0 && score < 50) return 'bg-orange-200'; // Light beige/peach background
-    if (score >= -50 && score < 0) return 'bg-pink-200'; // Light pink background
-    return 'bg-red-600'; // Bright red background
-  };
-
   const getCardBgColor = (score) => {
     if (score > 90) return 'bg-green-800'; // Dark green background
     if (score >= 50 && score <= 90) return 'bg-green-100'; // Light mint green background
@@ -33,8 +23,8 @@ const ClubNPSScores = () => {
   };
 
   // Get unique values for dropdowns
-  const seasons = [...new Set(allData.map(d => d.season))];
-  const [selectedSeason, setSelectedSeason] = useState(seasons[0] || '');
+  const seasons = useMemo(() => [...new Set(allData.map(d => d.season))], [allData]);
+  const [selectedSeason, setSelectedSeason] = useState('');
 
   // Load data from v_nps_scores view
   useEffect(() => {

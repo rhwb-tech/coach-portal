@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getAllChartConfigs } from '../services/chartConfigs';
 import BaseChart from './charts/BaseChart';
-import { getScreenSize, debounce } from '../utils/chartHelpers';
+import { getScreenSize } from '../utils/chartHelpers';
 import { AlertCircle, BarChart3 } from 'lucide-react';
 
 const ChartsGrid = React.memo(({ chartData, loading, error }) => {

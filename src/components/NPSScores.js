@@ -4,107 +4,107 @@ import { useAuth } from '../contexts/AuthContext';
 import { BarChart3, Calendar, ChevronDown, User, Download } from 'lucide-react';
 import InsightsTable from './CoachInsights/components/InsightsTable';
 
+// Mock data for development - will be replaced with v_nps_scores data
+const MOCK_NPS_DATA = [
+  {
+    season: "Season 13",
+    season_phase: "Summer",
+    program: "Pro",
+    coach: "Anand Dasgupta",
+    runner_status: "New",
+    feedback_nps: 75,
+    comms_nps: 75,
+    rel_nps: 75,
+    reco_nps: 75,
+    rhwb_comms_nps: 50,
+    rhwb_knowledge_nps: 75,
+    rhwb_reco_nps: 75,
+    total_responses: 4
+  },
+  {
+    season: "Season 13",
+    season_phase: "Summer",
+    program: "Pro",
+    coach: "Anand Dasgupta",
+    runner_status: "Return",
+    feedback_nps: 100,
+    comms_nps: 100,
+    rel_nps: 75,
+    reco_nps: 100,
+    rhwb_comms_nps: 75,
+    rhwb_knowledge_nps: 50,
+    rhwb_reco_nps: 100,
+    total_responses: 4
+  },
+  {
+    season: "Season 13",
+    season_phase: "Summer",
+    program: "Pro",
+    coach: "Ajaykumar Jadhav",
+    runner_status: "New",
+    feedback_nps: 80,
+    comms_nps: 80,
+    rel_nps: 80,
+    reco_nps: 80,
+    rhwb_comms_nps: 100,
+    rhwb_knowledge_nps: 100,
+    rhwb_reco_nps: 100,
+    total_responses: 5
+  },
+  {
+    season: "Season 13",
+    season_phase: "Summer",
+    program: "Pro",
+    coach: "Ajaykumar Jadhav",
+    runner_status: "Return",
+    feedback_nps: 87,
+    comms_nps: 95.7,
+    rel_nps: 95.7,
+    reco_nps: 100,
+    rhwb_comms_nps: 95.7,
+    rhwb_knowledge_nps: 100,
+    rhwb_reco_nps: 100,
+    total_responses: 23
+  },
+  {
+    season: "Season 12",
+    season_phase: "Spring",
+    program: "Masters",
+    coach: "Anand Dasgupta",
+    runner_status: "New",
+    feedback_nps: 85,
+    comms_nps: 90,
+    rel_nps: 85,
+    reco_nps: 90,
+    rhwb_comms_nps: 80,
+    rhwb_knowledge_nps: 85,
+    rhwb_reco_nps: 90,
+    total_responses: 8
+  },
+  {
+    season: "Season 12",
+    season_phase: "Spring",
+    program: "Masters",
+    coach: "Ajaykumar Jadhav",
+    runner_status: "Return",
+    feedback_nps: 92,
+    comms_nps: 88,
+    rel_nps: 90,
+    reco_nps: 95,
+    rhwb_comms_nps: 85,
+    rhwb_knowledge_nps: 90,
+    rhwb_reco_nps: 95,
+    total_responses: 12
+  }
+];
+
 export default function NPSScores() {
   const { user } = useAuth();
   
   const [userRole, setUserRole] = useState(null);
-  const isAdmin = () => (userRole || '').toLowerCase() === 'admin';
-  
-  // Mock data for development - will be replaced with v_nps_scores data
-  const mockData = [
-    {
-      season: "Season 13",
-      season_phase: "Summer",
-      program: "Pro",
-      coach: "Anand Dasgupta",
-      runner_status: "New",
-      feedback_nps: 75,
-      comms_nps: 75,
-      rel_nps: 75,
-      reco_nps: 75,
-      rhwb_comms_nps: 50,
-      rhwb_knowledge_nps: 75,
-      rhwb_reco_nps: 75,
-      total_responses: 4
-    },
-    {
-      season: "Season 13",
-      season_phase: "Summer",
-      program: "Pro",
-      coach: "Anand Dasgupta",
-      runner_status: "Return",
-      feedback_nps: 100,
-      comms_nps: 100,
-      rel_nps: 75,
-      reco_nps: 100,
-      rhwb_comms_nps: 75,
-      rhwb_knowledge_nps: 50,
-      rhwb_reco_nps: 100,
-      total_responses: 4
-    },
-    {
-      season: "Season 13",
-      season_phase: "Summer",
-      program: "Pro",
-      coach: "Ajaykumar Jadhav",
-      runner_status: "New",
-      feedback_nps: 80,
-      comms_nps: 80,
-      rel_nps: 80,
-      reco_nps: 80,
-      rhwb_comms_nps: 100,
-      rhwb_knowledge_nps: 100,
-      rhwb_reco_nps: 100,
-      total_responses: 5
-    },
-    {
-      season: "Season 13",
-      season_phase: "Summer",
-      program: "Pro",
-      coach: "Ajaykumar Jadhav",
-      runner_status: "Return",
-      feedback_nps: 87,
-      comms_nps: 95.7,
-      rel_nps: 95.7,
-      reco_nps: 100,
-      rhwb_comms_nps: 95.7,
-      rhwb_knowledge_nps: 100,
-      rhwb_reco_nps: 100,
-      total_responses: 23
-    },
-    {
-      season: "Season 12",
-      season_phase: "Spring",
-      program: "Masters",
-      coach: "Anand Dasgupta",
-      runner_status: "New",
-      feedback_nps: 85,
-      comms_nps: 90,
-      rel_nps: 85,
-      reco_nps: 90,
-      rhwb_comms_nps: 80,
-      rhwb_knowledge_nps: 85,
-      rhwb_reco_nps: 90,
-      total_responses: 8
-    },
-    {
-      season: "Season 12",
-      season_phase: "Spring",
-      program: "Masters",
-      coach: "Ajaykumar Jadhav",
-      runner_status: "Return",
-      feedback_nps: 92,
-      comms_nps: 88,
-      rel_nps: 90,
-      reco_nps: 95,
-      rhwb_comms_nps: 85,
-      rhwb_knowledge_nps: 90,
-      rhwb_reco_nps: 95,
-      total_responses: 12
-    }
-  ];
+  const isAdmin = (userRole || '').toLowerCase() === 'admin';
 
-  const [allData, setAllData] = useState(mockData);
+  const [allData, setAllData] = useState(MOCK_NPS_DATA);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
@@ -112,7 +112,6 @@ export default function NPSScores() {
   const [surveyData, setSurveyData] = useState([]);
   const [surveyLoading, setSurveyLoading] = useState(false);
   const [surveyError, setSurveyError] = useState(null);
-  const [surveyFilters, setSurveyFilters] = useState({ seasonNumber: null, coachEmail: null, selectedSeason: null, selectedCoach: null });
   
   // Get unique values for dropdowns
   const seasons = [...new Set(allData.map(d => d.season))];
@@ -131,14 +130,6 @@ export default function NPSScores() {
     if (score > 90) return 'text-white'; // White text only for dark green background
     if (score < -50) return 'text-white'; // White text only for dark red background
     return 'text-gray-700'; // Default color for other values
-  };
-
-  const getBgColor = (score) => {
-    if (score > 90) return 'bg-green-800'; // Dark green background
-    if (score >= 50 && score <= 90) return 'bg-green-200'; // Light mint green background
-    if (score >= 0 && score < 50) return 'bg-orange-200'; // Light beige/peach background
-    if (score >= -50 && score < 0) return 'bg-pink-200'; // Light pink background
-    return 'bg-red-600'; // Bright red background
   };
 
   const getCardBgColor = (score) => {
@@ -164,19 +155,19 @@ export default function NPSScores() {
         if (error) {
           console.warn('v_nps_scores view not available, using mock data:', error);
           // Fallback to mock data if view doesn't exist
-          setAllData(mockData);
+          setAllData(MOCK_NPS_DATA);
         } else if (data && data.length > 0) {
           setAllData(data);
         } else {
           // No data in view, use mock data
-          setAllData(mockData);
+          setAllData(MOCK_NPS_DATA);
         }
         
       } catch (err) {
         console.error('Failed to load NPS data:', err);
         setError('Failed to load NPS data');
         // Fallback to mock data
-        setAllData(mockData);
+        setAllData(MOCK_NPS_DATA);
       } finally {
         setLoading(false);
       }
@@ -208,10 +199,10 @@ export default function NPSScores() {
 
   // When not admin, force selectedCoach to user's own name (if available in options)
   useEffect(() => {
-    if (!isAdmin() && coachName) {
+    if (!isAdmin && coachName) {
       setSelectedCoach(coachName);
     }
-  }, [coachName]);
+  }, [coachName, isAdmin]);
 
   // Load Runner Survey Results filtered by selected season and coach
   useEffect(() => {
@@ -268,8 +259,6 @@ export default function NPSScores() {
           setSurveyData(data || []);
         }
 
-        // Save filters used for debugging display
-        setSurveyFilters({ season: seasonLabel, coachEmail: coachEmailFilter, selectedSeason, selectedCoach });
       } catch (e) {
         setSurveyError('Failed to load survey results');
         setSurveyData([]);
@@ -287,7 +276,7 @@ export default function NPSScores() {
         setSurveyRateLoading(true);
         setSurveyRate(null);
 
-        const effectiveCoachLocal = isAdmin() ? (selectedCoach || coachName) : (coachName || selectedCoach);
+        const effectiveCoachLocal = isAdmin ? (selectedCoach || coachName) : (coachName || selectedCoach);
         if (!selectedSeason || !effectiveCoachLocal) {
           setSurveyRateLoading(false);
           return;
@@ -312,7 +301,7 @@ export default function NPSScores() {
       }
     };
     loadSurveyResponseRate();
-  }, [selectedSeason, selectedCoach, coachName, userRole]);
+  }, [selectedSeason, selectedCoach, coachName, isAdmin]);
 
   // Calculate overall averages across all coaches for the selected season and program
   const calculateOverallAverages = (program) => {
@@ -363,18 +352,6 @@ export default function NPSScores() {
     const returnRunner = programData.find(d => d.runner_status === 'Return');
     const allRunner = programData.find(d => d.runner_status === 'All');
     
-    // Coach Performance Metrics
-    const avgFeedback = Math.round(programData.reduce((sum, item) => sum + item.feedback_nps, 0) / programData.length);
-    const avgCoachComms = Math.round(programData.reduce((sum, item) => sum + item.comms_nps, 0) / programData.length);
-    const avgCoachRel = Math.round(programData.reduce((sum, item) => sum + item.rel_nps, 0) / programData.length);
-    const avgCoachReco = Math.round(programData.reduce((sum, item) => sum + item.reco_nps, 0) / programData.length);
-    
-    // RHWB Club Performance Metrics
-    const avgRhwbComms = Math.round(programData.reduce((sum, item) => sum + item.rhwb_comms_nps, 0) / programData.length);
-    const avgRhwbKnowledge = Math.round(programData.reduce((sum, item) => sum + item.rhwb_knowledge_nps, 0) / programData.length);
-    const avgRhwbReco = Math.round(programData.reduce((sum, item) => sum + item.rhwb_reco_nps, 0) / programData.length);
-
-
     // Tooltip component for showing question text
     const Tooltip = ({ children, text }) => {
       const [show, setShow] = React.useState(false);
@@ -569,9 +546,7 @@ export default function NPSScores() {
     );
   };
 
-  const effectiveCoach = isAdmin() ? selectedCoach : (coachName || selectedCoach);
-  const data = allData.filter(d => d.coach === effectiveCoach && d.season === selectedSeason);
-  const seasonPhase = data.length > 0 ? data[0].season_phase : '';
+  const effectiveCoach = isAdmin ? selectedCoach : (coachName || selectedCoach);
 
   if (loading) {
     return (
@@ -644,7 +619,7 @@ export default function NPSScores() {
                 </div>
 
                 {/* Coach - Admin only */}
-                {isAdmin() && (
+                {isAdmin && (
                   <div className="relative">
                     <label htmlFor="coach-select" className="sr-only">Select Coach</label>
                     <div className="relative">

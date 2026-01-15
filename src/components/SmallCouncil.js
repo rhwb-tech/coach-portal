@@ -25,6 +25,8 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
   });
   const [showTransferConfirmation, setShowTransferConfirmation] = useState(false);
   const [pendingTransferId, setPendingTransferId] = useState(null);
+  const [showRejectConfirmation, setShowRejectConfirmation] = useState(false);
+  const [pendingRejectId, setPendingRejectId] = useState(null);
   const [removingTransferId, setRemovingTransferId] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [fsTransferLoading, setFsTransferLoading] = useState(null);
@@ -272,9 +274,9 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
       // Update runner_season_info table based on request type
       if (transferRequest.action_type === 'Transfer Runner') {
         // Transfer requests: update program/team
-        if (!transferRequest.new_program || !transferRequest.runner_email_id || !currentSeason) {
+        if (!transferRequest.new_race_distance || !transferRequest.runner_email_id || !currentSeason) {
           console.error('Missing required data for runner update:', {
-            new_program: transferRequest.new_program,
+            new_race_distance: transferRequest.new_race_distance,
             runner_email_id: transferRequest.runner_email_id,
             currentSeason: currentSeason
           });
@@ -283,13 +285,22 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
         }
 
         // Proceed with updating runner_season_info
+        // Always update these fields if present on the request
+        const baseUpdateData = {
+          race_distance: null,
+          activity: transferRequest.new_activity ?? null,
+          level: transferRequest.new_program_level ?? null,
+          segment: transferRequest.new_segment ?? null
+        };
+        
         let updateData = {};
         
-        if (transferRequest.new_program === 'Lite') {
-          updateData = { coach: 'Lite' };
+        if (transferRequest.new_race_distance === 'Lite') {
+          // Lite uses coach assignment, and clears race_distance/level
+          updateData = { ...baseUpdateData, coach: 'Lite', race_distance: null, level: null };
         } else {
           // For race distances (5K, 10K, Half Marathon, Full Marathon)
-          updateData = { race_distance: transferRequest.new_program };
+          updateData = { ...baseUpdateData, race_distance: transferRequest.new_race_distance };
         }
 
         // Update record in runner_season_info (season is used only to filter, not to update)
@@ -353,11 +364,11 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
 
             // Show success message
       let message = 'Transfer completed successfully!';
-      if (transferRequest.new_program) {
-        if (transferRequest.new_program === 'Lite') {
+      if (transferRequest.new_race_distance) {
+        if (transferRequest.new_race_distance === 'Lite') {
           message += ` Runner assigned to Lite program.`;
         } else {
-          message += ` Runner assigned to ${transferRequest.new_program} program.`;
+          message += ` Runner assigned to ${transferRequest.new_race_distance} program.`;
         }
       }
       setSuccessMessage(message);
@@ -374,6 +385,54 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
     } catch (error) {
       console.error('Error closing transfer request:', error);
       alert('Failed to close transfer request. Please try again.');
+    }
+  };
+
+  const handleRejectTransfer = async (requestId) => {
+    try {
+      // Check authentication first to satisfy RLS policies
+      if (!isAuthenticated || !user) {
+        console.error('User not authenticated');
+        alert('Authentication required. Please log in again.');
+        return;
+      }
+
+      // Get current session to ensure it's valid
+      const { data: { session }, error: authError } = await supabase.auth.getSession();
+      if (authError || !session) {
+        console.error('Session error:', authError);
+        alert('Session expired. Please log in again.');
+        return;
+      }
+
+      const { error: updateError } = await supabase
+        .from('rhwb_action_requests')
+        .update({
+          status: 'rejected',
+          closed_date: new Date().toISOString()
+        })
+        .eq('id', requestId);
+
+      if (updateError) {
+        console.error('Error rejecting transfer request:', updateError);
+        alert('Failed to reject transfer request. Please try again.');
+        return;
+      }
+
+      setSuccessMessage('Transfer request rejected.');
+
+      // Start the removal animation
+      setRemovingTransferId(requestId);
+
+      // Wait for animation to complete, then refresh data
+      setTimeout(() => {
+        setRemovingTransferId(null);
+        setSuccessMessage('');
+        loadActionRequests();
+      }, 500);
+    } catch (error) {
+      console.error('Error rejecting transfer request:', error);
+      alert('Failed to reject transfer request. Please try again.');
     }
   };
 
@@ -583,14 +642,40 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
                           {/* Transfer Details - Responsive layout */}
                           <div className="mb-2">
                             <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">
-                              <span className="font-medium">Transfer:</span> {request.current_program || 'Unknown'}
+                              <span className="font-medium">From:</span>{' '}
+                              <span className="text-gray-900">
+                                {request.current_segment || 'N/A'}
+                              </span>
+                              <span className="text-gray-400">{' • '}</span>
+                              <span className="text-gray-900">
+                                {request.current_race_distance || 'N/A'}
+                              </span>
                               {request.current_program_level && (
                                 <span className="text-gray-500"> ({request.current_program_level})</span>
                               )}
-                              <span> → </span>
-                              {request.new_program || 'Unknown'}
+                              {request.current_activity && (
+                                <>
+                                  <span className="text-gray-400">{' • '}</span>
+                                  <span className="text-gray-900">{request.current_activity}</span>
+                                </>
+                              )}
+                              <br />
+                              <span className="font-medium">To:</span>{' '}
+                              <span className="text-blue-700 font-medium">
+                                {request.new_segment || 'N/A'}
+                              </span>
+                              <span className="text-gray-400">{' • '}</span>
+                              <span className="text-blue-700 font-medium">
+                                {request.new_race_distance || 'N/A'}
+                              </span>
                               {request.new_program_level && (
                                 <span className="text-gray-500"> ({request.new_program_level})</span>
+                              )}
+                              {request.new_activity && (
+                                <>
+                                  <span className="text-gray-400">{' • '}</span>
+                                  <span className="text-blue-700 font-medium">{request.new_activity}</span>
+                                </>
                               )}
                               <span className="hidden sm:inline"> • </span>
                               <br className="sm:hidden" />
@@ -630,6 +715,15 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
                                 className="px-2 sm:px-3 py-1 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition-colors"
                               >
                                 Mark Completed
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setPendingRejectId(request.id);
+                                  setShowRejectConfirmation(true);
+                                }}
+                                className="px-2 sm:px-3 py-1 bg-red-600 text-white text-xs rounded-lg hover:bg-red-700 transition-colors"
+                              >
+                                Reject
                               </button>
                             </div>
                           )}
@@ -769,6 +863,53 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
                 className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
               >
                 Confirm Completion
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Confirmation Modal */}
+      {showRejectConfirmation && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            {/* Header */}
+            <div className="flex items-center space-x-3 p-6 border-b border-gray-200">
+              <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <h2 className="text-xl font-bold text-gray-900">Reject Transfer Request</h2>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              <p className="text-gray-700 mb-4">
+                Are you sure you want to reject this request? This will mark the request as <span className="font-semibold">rejected</span>.
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-between p-6 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowRejectConfirmation(false);
+                  setPendingRejectId(null);
+                }}
+                className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (pendingRejectId) {
+                    handleRejectTransfer(pendingRejectId);
+                  }
+                  setShowRejectConfirmation(false);
+                  setPendingRejectId(null);
+                }}
+                className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+              >
+                Reject
               </button>
             </div>
           </div>

@@ -209,24 +209,6 @@ const determineUserRole = (email) => {
 
 
 
-// Helper function to compare session objects
-const isSessionChanged = (currentSession, newSession) => {
-  if (!currentSession && !newSession) return false; // Both null
-  if (!currentSession || !newSession) return true; // One is null, other isn't
-  
-  // For empty mock sessions, consider them unchanged if both are empty objects
-  if (Object.keys(currentSession).length === 0 && Object.keys(newSession).length === 0) {
-    return false;
-  }
-  
-  // Compare key session properties
-  return (
-    currentSession.access_token !== newSession.access_token ||
-    currentSession.user?.id !== newSession.user?.id ||
-    currentSession.user?.email !== newSession.user?.email
-  );
-};
-
 // Helper function to validate and handle URL override
 const validateUrlOverride = async (overrideEmail, hasActiveSession = false) => {
   // Require active session for URL overrides

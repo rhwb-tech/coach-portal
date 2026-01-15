@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Key, ArrowLeft, CheckCircle } from 'lucide-react';
+import { Key, ArrowLeft } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 
 const AuthOTPVerification = ({ email, onBack, onSuccess }) => {

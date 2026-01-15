@@ -37,8 +37,12 @@ const KnowYourRunner = ({
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [transferRunner, setTransferRunner] = useState(null);
   const [transferRunnerLevel, setTransferRunnerLevel] = useState(null);
+  const [transferRunnerActivity, setTransferRunnerActivity] = useState(null);
+  const [transferRunnerSegment, setTransferRunnerSegment] = useState(null);
   const [selectedProgram, setSelectedProgram] = useState(null);
   const [selectedNewLevel, setSelectedNewLevel] = useState(null);
+  const [selectedNewActivity, setSelectedNewActivity] = useState(null);
+  const [selectedNewSegment, setSelectedNewSegment] = useState(null);
   const [transferLevelMenuOpen, setTransferLevelMenuOpen] = useState(false);
   const [transferComment, setTransferComment] = useState('');
   const [pendingTransfers, setPendingTransfers] = useState(new Set());
@@ -94,7 +98,8 @@ const KnowYourRunner = ({
       let query = supabase
         .from('rhwb_action_requests')
         .select('runner_email_id, action_type, status')
-        .eq('status', 'pending');
+        .eq('status', 'pending')
+        .eq('latest_row', true);
 
       // Add season filter if selectedSeason is available
       if (selectedSeason) {
@@ -668,6 +673,25 @@ const KnowYourRunner = ({
     setMenuOpenFor(menuOpenFor === runnerId ? null : runnerId);
   };
 
+  const normalizeActivity = (activityValue) => {
+    if (!activityValue) return null;
+    const v = String(activityValue).trim().toLowerCase();
+    if (!v) return null;
+    if (v.startsWith('walk')) return 'Walk';
+    if (v.startsWith('run')) return 'Run';
+    return 'Run';
+  };
+
+  const normalizeSegment = (segmentValue) => {
+    if (!segmentValue) return null;
+    const v = String(segmentValue).trim().toLowerCase();
+    if (!v) return null;
+    if (v === 'lite') return 'Lite';
+    if (v === 'pro') return 'Pro';
+    if (v === 'masters') return 'Masters';
+    return null;
+  };
+
   // Handle transfer runner
   const handleTransferRunner = async (runner) => {
     setTransferRunner(runner);
@@ -679,22 +703,40 @@ const KnowYourRunner = ({
         const seasonFilter = selectedSeason.toString().startsWith('Season ') ? selectedSeason : `Season ${selectedSeason}`;
         const { data, error } = await supabase
           .from('runner_season_info')
-          .select('level')
+          .select('level, activity, segment')
           .eq('email_id', runner.email_id)
           .eq('season', seasonFilter)
           .single();
         
         if (!error && data) {
           setTransferRunnerLevel(data.level || null);
+          const currentActivity = normalizeActivity(data.activity);
+          setTransferRunnerActivity(currentActivity);
+          setSelectedNewActivity(currentActivity);
+          const currentSegment = normalizeSegment(data.segment);
+          setTransferRunnerSegment(currentSegment);
+          setSelectedNewSegment(currentSegment);
         } else {
           setTransferRunnerLevel(null);
+          setTransferRunnerActivity(null);
+          setSelectedNewActivity(null);
+          setTransferRunnerSegment(null);
+          setSelectedNewSegment(null);
         }
       } catch (error) {
         console.error('Error fetching runner level:', error);
         setTransferRunnerLevel(null);
+        setTransferRunnerActivity(null);
+        setSelectedNewActivity(null);
+        setTransferRunnerSegment(null);
+        setSelectedNewSegment(null);
       }
     } else {
       setTransferRunnerLevel(null);
+      setTransferRunnerActivity(null);
+      setSelectedNewActivity(null);
+      setTransferRunnerSegment(null);
+      setSelectedNewSegment(null);
     }
     
     setShowTransferModal(true);
@@ -805,6 +847,14 @@ const KnowYourRunner = ({
       alert('Please select a program first.');
       return;
     }
+    if (!selectedNewActivity) {
+      alert('Please select a new activity (Run or Walk).');
+      return;
+    }
+    if (!selectedNewSegment) {
+      alert('Please select a new segment (Lite, Pro, or Masters).');
+      return;
+    }
     // For race distance programs, require level selection
     if (selectedProgram !== 'Lite' && ['5K', '10K', 'Half Marathon', 'Full Marathon'].includes(selectedProgram) && !selectedNewLevel) {
       alert('Please select a level for the new program.');
@@ -832,10 +882,15 @@ const KnowYourRunner = ({
         runner_email_id: transferRunner.email_id,
         requestor_email_id: coachEmail || 'unknown@example.com',
         comments: transferComment.trim() || null,
-        current_program: transferRunner.race_distance,
+        latest_row: true,
+        current_race_distance: transferRunner.race_distance,
         current_program_level: transferRunnerLevel || null,
-        new_program: selectedProgram,
+        current_activity: transferRunnerActivity || null,
+        current_segment: transferRunnerSegment || null,
+        new_race_distance: selectedProgram,
         new_program_level: selectedNewLevel || null,
+        new_activity: selectedNewActivity || null,
+        new_segment: selectedNewSegment || null,
         season: selectedSeason
       };
 
@@ -869,8 +924,12 @@ const KnowYourRunner = ({
       setShowConfirmationModal(false);
       setTransferRunner(null);
       setTransferRunnerLevel(null);
+      setTransferRunnerActivity(null);
+      setTransferRunnerSegment(null);
       setSelectedProgram(null);
       setSelectedNewLevel(null);
+      setSelectedNewActivity(null);
+      setSelectedNewSegment(null);
       setTransferComment('');
       setTransferDistanceMenuOpen(false);
       setTransferLevelMenuOpen(false);
@@ -892,6 +951,7 @@ const KnowYourRunner = ({
         runner_email_id: deferRunner.email_id,
         requestor_email_id: coachEmail || 'unknown@example.com',
         comments: deferComment.trim() || null,
+        latest_row: true,
         status: 'pending',
         season: selectedSeason
       };
@@ -1854,67 +1914,81 @@ const KnowYourRunner = ({
               </p>
               <div className="bg-gray-50 rounded-lg p-4 mb-4 border border-gray-200">
                 <p className="text-sm text-gray-600 mb-2">Current Program Details:</p>
-                <div className="flex items-center space-x-4">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                  {/* Row 1 */}
+                  <div>
+                    <span className="text-xs text-gray-500">Activity:</span>
+                    <span className="text-blue-600 font-medium ml-2">{transferRunnerActivity || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500">Segment:</span>
+                    <span className="text-blue-600 font-medium ml-2">{transferRunnerSegment || 'N/A'}</span>
+                  </div>
+
+                  {/* Row 2 */}
                   <div>
                     <span className="text-xs text-gray-500">Race Distance:</span>
                     <span className="text-blue-600 font-medium ml-2">{transferRunner.race_distance || 'N/A'}</span>
                   </div>
-                  {transferRunnerLevel && (
-                    <div>
-                      <span className="text-xs text-gray-500">Level:</span>
-                      <span className="text-blue-600 font-medium ml-2">{transferRunnerLevel}</span>
-                    </div>
-                  )}
+                  <div>
+                    <span className="text-xs text-gray-500">Level:</span>
+                    <span className="text-blue-600 font-medium ml-2">{transferRunnerLevel || 'N/A'}</span>
+                  </div>
                 </div>
               </div>
-              <p className="text-gray-700 mb-4">Select a new program:</p>
+              <p className="text-gray-700 mb-4">Select the new details (in order):</p>
 
-              {/* Program Options */}
-              <div className="space-y-2 mb-6">
-                {/* Lite Option */}
-                <button
-                  onClick={() => handleProgramSelection('Lite')}
-                  className={`w-full flex items-center justify-between p-3 text-left border rounded-lg transition-colors ${
-                    selectedProgram === 'Lite' 
-                      ? 'border-blue-500 bg-blue-50 text-blue-700' 
-                      : 'border-gray-200 hover:bg-gray-50 text-gray-900'
-                  }`}
+              {/* Activity Selection */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  New Activity
+                </label>
+                <select
+                  value={selectedNewActivity || ''}
+                  onChange={(e) => setSelectedNewActivity(e.target.value || null)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                 >
-                  <span className="font-medium">Lite</span>
-                  {selectedProgram === 'Lite' ? (
-                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  )}
-                </button>
+                  <option value="" disabled>Select activity</option>
+                  <option value="Run">Run</option>
+                  <option value="Walk">Walk</option>
+                </select>
+              </div>
 
-                {/* OR Separator */}
-                <div className="flex items-center justify-center py-2">
-                  <div className="flex-1 border-t border-gray-300"></div>
-                  <span className="px-3 text-sm font-medium text-gray-500 bg-white">OR</span>
-                  <div className="flex-1 border-t border-gray-300"></div>
-                </div>
+              {/* Segment Selection */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  New Segment
+                </label>
+                <select
+                  value={selectedNewSegment || ''}
+                  onChange={(e) => setSelectedNewSegment(e.target.value || null)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                >
+                  <option value="" disabled>Select segment</option>
+                  <option value="Lite">Lite</option>
+                  <option value="Pro">Pro</option>
+                  <option value="Masters">Masters</option>
+                </select>
+              </div>
 
-                {/* Race Distance Dropdown */}
+              {/* Race Distance / Program Selection */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  New Race Distance
+                </label>
                 <div className="relative">
                   <button
                     onClick={() => setTransferDistanceMenuOpen(!transferDistanceMenuOpen)}
                     className={`w-full flex items-center justify-between p-3 text-left border rounded-lg transition-colors ${
-                      selectedProgram && selectedProgram !== 'Lite' && ['5K', '10K', 'Half Marathon', 'Full Marathon'].includes(selectedProgram)
-                        ? 'border-blue-500 bg-blue-50 text-blue-700' 
-                        : 'border-gray-200 hover:bg-gray-50 text-gray-900'
+                      selectedProgram ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50 text-gray-900'
                     }`}
                   >
                     <span className="font-medium">
-                      {selectedProgram && selectedProgram !== 'Lite' ? selectedProgram : 'Select Race Distance'}
+                      {selectedProgram || 'Select Race Distance'}
                     </span>
                     <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${transferDistanceMenuOpen ? 'rotate-180' : ''}`} />
                   </button>
-                  
+
                   {transferDistanceMenuOpen && (
                     <div className="absolute top-full left-0 mt-1 w-full bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
                       {['5K', '10K', 'Half Marathon', 'Full Marathon'].map((distance) => (
@@ -1938,7 +2012,7 @@ const KnowYourRunner = ({
               {selectedProgram && selectedProgram !== 'Lite' && ['5K', '10K', 'Half Marathon', 'Full Marathon'].includes(selectedProgram) && (
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Select Level for {selectedProgram}
+                    New Level
                   </label>
                   <div className="relative transfer-level-dropdown">
                     <button
@@ -1954,7 +2028,7 @@ const KnowYourRunner = ({
                       </span>
                       <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${transferLevelMenuOpen ? 'rotate-180' : ''}`} />
                     </button>
-                    
+
                     {transferLevelMenuOpen && (
                       <div className="absolute bottom-full left-0 mb-1 w-full bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
                         {['Exp', 'Speed', 'Std'].map((level) => (
@@ -1972,17 +2046,6 @@ const KnowYourRunner = ({
                       </div>
                     )}
                   </div>
-                </div>
-              )}
-
-              {/* Selected Program Display */}
-              {selectedProgram && (
-                <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm text-blue-700 mb-1">Selected Program:</p>
-                  <p className="font-medium text-blue-900">
-                    {selectedProgram}
-                    {selectedNewLevel && ` (${selectedNewLevel})`}
-                  </p>
                 </div>
               )}
 
@@ -2008,8 +2071,12 @@ const KnowYourRunner = ({
                   setShowTransferModal(false);
                   setTransferRunner(null);
                   setTransferRunnerLevel(null);
+                  setTransferRunnerActivity(null);
+                  setTransferRunnerSegment(null);
                   setSelectedProgram(null);
                   setSelectedNewLevel(null);
+                  setSelectedNewActivity(null);
+                  setSelectedNewSegment(null);
                   setTransferComment('');
                   setTransferDistanceMenuOpen(false);
                   setTransferLevelMenuOpen(false);
@@ -2061,6 +2128,22 @@ const KnowYourRunner = ({
                   </div>
                 </div>
                 <div className="flex justify-between items-center mt-2">
+                  <span className="text-gray-600">Activity:</span>
+                  <div className="text-right">
+                    <span className="font-medium text-gray-900">{transferRunnerActivity || 'N/A'}</span>
+                    <span className="text-gray-500 text-sm ml-2">→</span>
+                    <span className="font-medium text-blue-600 ml-2">{selectedNewActivity || 'N/A'}</span>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-gray-600">Segment:</span>
+                  <div className="text-right">
+                    <span className="font-medium text-gray-900">{transferRunnerSegment || 'N/A'}</span>
+                    <span className="text-gray-500 text-sm ml-2">→</span>
+                    <span className="font-medium text-blue-600 ml-2">{selectedNewSegment || 'N/A'}</span>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center mt-2">
                   <span className="text-gray-600">To:</span>
                   <div className="text-right">
                     <span className="font-medium text-blue-600">{selectedProgram}</span>
@@ -2085,8 +2168,12 @@ const KnowYourRunner = ({
                   setShowConfirmationModal(false);
                   setTransferRunner(null);
                   setTransferRunnerLevel(null);
+                  setTransferRunnerActivity(null);
+                  setTransferRunnerSegment(null);
                   setSelectedProgram(null);
                   setSelectedNewLevel(null);
+                  setSelectedNewActivity(null);
+                  setSelectedNewSegment(null);
                   setTransferComment('');
                 }}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"

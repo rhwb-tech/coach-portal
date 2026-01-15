@@ -2,12 +2,9 @@ import React, { useState, useMemo } from 'react';
 import { 
   ChevronUp, 
   ChevronDown, 
-  Search, 
   Download, 
   Table as TableIcon,
-  AlertCircle,
-  Eye,
-  EyeOff
+  AlertCircle
 } from 'lucide-react';
 import { getTableConfig } from '../services/chartConfigs';
 import { formatNumber, formatPercentage } from '../utils/chartHelpers';
@@ -16,34 +13,10 @@ const InsightsTable = ({ tableData, loading, error, columns }) => {
   const tableConfig = getTableConfig();
   const displayColumns = columns || tableConfig.columns;
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
-  const [searchTerm, setSearchTerm] = useState('');
-  const [hiddenColumns, setHiddenColumns] = useState(new Set());
+  const [searchTerm] = useState('');
+  const [hiddenColumns] = useState(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-
-  // Component for truncated text with hover tooltip
-  const TruncatedText = ({ text, maxWords = 5 }) => {
-    if (!text || typeof text !== 'string') return '-';
-    
-    const words = text.split(' ');
-    const isTruncated = words.length > maxWords;
-    const truncatedText = isTruncated ? words.slice(0, maxWords).join(' ') + '...' : text;
-
-    if (!isTruncated) {
-      return <span>{text}</span>;
-    }
-
-    return (
-      <div className="relative group">
-        <span className="cursor-help">{truncatedText}</span>
-        <div className="absolute z-50 invisible group-hover:visible bg-gray-900 text-white text-sm rounded-lg p-3 shadow-lg max-w-xs break-words -top-2 left-0 transform -translate-y-full">
-          <div className="whitespace-pre-wrap">{text}</div>
-          {/* Arrow pointing down */}
-          <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-        </div>
-      </div>
-    );
-  };
 
   // Format cell value based on column format
   const formatCellValue = (value, format, columnKey) => {
@@ -127,19 +100,6 @@ const InsightsTable = ({ tableData, loading, error, columns }) => {
       key: columnKey,
       direction: prev.key === columnKey && prev.direction === 'asc' ? 'desc' : 'asc'
     }));
-  };
-
-  // Handle column visibility toggle
-  const toggleColumnVisibility = (columnKey) => {
-    setHiddenColumns(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(columnKey)) {
-        newSet.delete(columnKey);
-      } else {
-        newSet.add(columnKey);
-      }
-      return newSet;
-    });
   };
 
   // Export data to CSV

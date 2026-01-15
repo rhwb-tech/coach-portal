@@ -12,10 +12,9 @@ const InsightsHeader = ({
   availableMesos = [],
   selectedMeso,
   onMesoChange,
-  isAdmin = typeof isAdmin === 'boolean' ? isAdmin : false,
+  isAdmin = false,
   onRefresh 
 }) => {
-  const currentSeason = seasons.find(s => s.id === selectedSeason);
   const [refreshing, setRefreshing] = React.useState(false);
   
 

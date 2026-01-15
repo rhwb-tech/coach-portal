@@ -404,8 +404,6 @@ class InsightsService {
    * Mock data provider (replace with actual Supabase queries in production)
    */
   getMockData(sql, params) {
-    const [seasonName] = params || [];
-
     // Determine which query based on SQL content
     if (sql.includes('cumulative_score') && sql.includes('rhwb_meso_scores')) {
       return [
@@ -824,13 +822,13 @@ class InsightsService {
    */
   cancelAllRequests() {
     // Cancel all pending requests
-    for (const [key, controller] of this.pendingRequests) {
+    for (const [, controller] of this.pendingRequests) {
       controller.abort();
     }
     this.pendingRequests.clear();
     
     // Clear all debounce timers
-    for (const [key, timer] of this.debounceTimers) {
+    for (const [, timer] of this.debounceTimers) {
       clearTimeout(timer);
     }
     this.debounceTimers.clear();

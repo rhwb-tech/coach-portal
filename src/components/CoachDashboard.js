@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Info, Save, TrendingUp, ChevronDown, Menu, X, MessageSquare, BookOpen, Users, BarChart3, Shield } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Search, Info, Save, TrendingUp, ChevronDown, Menu, X, MessageSquare, BookOpen, Users, BarChart3, Shield, Camera } from 'lucide-react';
 import { fetchCoachData, updateAthleteData, calculateCompletionRate, getAvatarInitials } from '../services/coachService';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../services/supabaseClient';
@@ -33,6 +33,15 @@ const CoachDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [coachName, setCoachName] = useState(null);
+  // NOTE: We store the *public URL* in rhwb_coaches.profile_picture (Option B, like rhwb-pulse-v3).
+  // We keep a derived object path (if parseable) only for best-effort cleanup.
+  const [coachProfilePicturePath, setCoachProfilePicturePath] = useState(null);
+  const [coachProfilePictureUrl, setCoachProfilePictureUrl] = useState(null);
+  const [coachProfilePictureLoadError, setCoachProfilePictureLoadError] = useState(false);
+  const [coachProfilePictureUploading, setCoachProfilePictureUploading] = useState(false);
+  const [coachProfilePictureVersion, setCoachProfilePictureVersion] = useState(0);
+  const [, setCoachProfilePictureOwnerTable] = useState(null); // 'rhwb_coaches' | 'rhwb_admin' | null
+  const coachProfilePictureInputRef = useRef(null);
   
   // Cohort data state for Know Your Runner
   const [cohortData, setCohortData] = useState([]);
@@ -216,6 +225,269 @@ const CoachDashboard = () => {
 
     loadCoachName();
   }, [coachEmail, user?.name]);
+
+  const sanitizeEmailForFilename = (email) => {
+    return (email || '')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+  };
+
+  const extractProfilePicturesObjectPathFromPublicUrl = (publicUrl) => {
+    try {
+      if (!publicUrl || typeof publicUrl !== 'string') return null;
+      const url = new URL(publicUrl);
+      const marker = '/storage/v1/object/public/profile_pictures/';
+      const idx = url.pathname.indexOf(marker);
+      if (idx === -1) return null;
+      const pathPart = url.pathname.slice(idx + marker.length);
+      return decodeURIComponent(pathPart);
+    } catch {
+      return null;
+    }
+  };
+
+  const fetchProfilePictureRecord = async (emailLower) => {
+    // Preference: rhwb_coaches first, then rhwb_admin.
+    // Some users may exist in both; we will always use rhwb_coaches in that case.
+    const { data: coachRow, error: coachErr } = await supabase
+      .from('rhwb_coaches')
+      .select('email_id, profile_picture')
+      .eq('email_id', emailLower)
+      .maybeSingle();
+
+    if (coachErr) throw coachErr;
+    if (coachRow) {
+      return { table: 'rhwb_coaches', profile_picture: coachRow.profile_picture || null };
+    }
+
+    const { data: adminRow, error: adminErr } = await supabase
+      .from('rhwb_admin')
+      .select('email_id, profile_picture')
+      .eq('email_id', emailLower)
+      .maybeSingle();
+
+    if (adminErr) throw adminErr;
+    if (adminRow) {
+      return { table: 'rhwb_admin', profile_picture: adminRow.profile_picture || null };
+    }
+
+    return { table: null, profile_picture: null };
+  };
+
+  const getCoachAvatarFallback = useMemo(() => {
+    return getAvatarInitials(coachName || user?.name || coachEmail || 'Coach');
+  }, [coachName, user?.name, coachEmail]);
+
+  // Load coach profile picture path from rhwb_coaches and resolve storage URL
+  useEffect(() => {
+    const loadCoachProfilePicture = async () => {
+      if (!coachEmail) {
+        setCoachProfilePicturePath(null);
+        setCoachProfilePictureUrl(null);
+        setCoachProfilePictureLoadError(false);
+        setCoachProfilePictureOwnerTable(null);
+        return;
+      }
+
+      try {
+        const emailLower = coachEmail.toLowerCase();
+        const result = await fetchProfilePictureRecord(emailLower);
+        const publicUrl = result.profile_picture || null;
+        setCoachProfilePictureUrl(publicUrl);
+        setCoachProfilePicturePath(extractProfilePicturesObjectPathFromPublicUrl(publicUrl));
+        setCoachProfilePictureOwnerTable(result.table);
+        setCoachProfilePictureLoadError(false);
+
+        if (!publicUrl) {
+          setCoachProfilePictureUrl(null);
+          return;
+        }
+      } catch (e) {
+        console.error('Failed to load coach profile picture:', e);
+        setCoachProfilePicturePath(null);
+        setCoachProfilePictureUrl(null);
+        setCoachProfilePictureLoadError(false);
+        setCoachProfilePictureOwnerTable(null);
+      }
+    };
+
+    loadCoachProfilePicture();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coachEmail, coachProfilePictureVersion]);
+
+  const handleCoachProfilePictureFileChange = async (event) => {
+    try {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      if (!coachEmail) return;
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData?.session) {
+        alert('You must be signed in to upload a profile picture.');
+        return;
+      }
+
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!allowedTypes.includes(file.type)) {
+        alert('Please upload a JPG, PNG, or WEBP image.');
+        return;
+      }
+
+      // 5MB max (keeps storage + download reasonable)
+      const maxBytes = 5 * 1024 * 1024;
+      if (file.size > maxBytes) {
+        alert('Please upload an image smaller than 5MB.');
+        return;
+      }
+
+      setCoachProfilePictureUploading(true);
+
+      const existingPath = coachProfilePicturePath;
+      const extFromName = file.name.split('.').pop()?.toLowerCase();
+      const ext =
+        extFromName && ['jpg', 'jpeg', 'png', 'webp'].includes(extFromName) ? extFromName : 'jpg';
+      // Use a unique filename to avoid requiring "update" permission on storage objects.
+      const uniqueId =
+        typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`;
+      const newPath = `coaches/${sanitizeEmailForFilename(coachEmail)}/${uniqueId}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('profile_pictures')
+        .upload(newPath, file, {
+          contentType: file.type,
+          cacheControl: '3600'
+        });
+
+      if (uploadError) {
+        console.error('Profile picture upload failed:', uploadError);
+        alert(
+          `Failed to upload your profile picture.\n\n${uploadError.message || 'Unknown error'}\n\nIf this persists, it is usually a Supabase Storage policy/permission issue for inserts into the profile_pictures bucket.`
+        );
+        return;
+      }
+
+      // Get public URL (bucket is public)
+      const { data: publicData } = supabase.storage.from('profile_pictures').getPublicUrl(newPath);
+      const publicUrl = publicData?.publicUrl || null;
+      if (!publicUrl) {
+        alert('Uploaded the image, but failed to resolve the public URL. Please try again.');
+        return;
+      }
+
+      // Determine which table to update: rhwb_coaches first, else rhwb_admin.
+      const emailLower = coachEmail.toLowerCase();
+      const ownerResult = await fetchProfilePictureRecord(emailLower);
+      const tableToUpdate = ownerResult.table;
+
+      if (!tableToUpdate) {
+        alert(
+          `Uploaded the image, but could not find a profile row for ${emailLower} in either rhwb_coaches or rhwb_admin.`
+        );
+        return;
+      }
+
+      const { error: updateError } = await supabase
+        .from(tableToUpdate)
+        .update({ profile_picture: publicUrl })
+        .eq('email_id', emailLower);
+
+      if (updateError) {
+        console.error(`Failed to update ${tableToUpdate}.profile_picture:`, updateError);
+        alert(
+          `Uploaded the image, but failed to update your profile.\n\n${updateError.message || 'Unknown error'}`
+        );
+        return;
+      }
+
+      setCoachProfilePictureOwnerTable(tableToUpdate);
+
+      // Best-effort cleanup of old file (may be blocked by Storage policies).
+      if (existingPath) {
+        supabase.storage
+          .from('profile_pictures')
+          .remove([existingPath])
+          .then(({ error: removeError }) => {
+            if (removeError) console.warn('Failed to remove old profile picture:', removeError);
+          })
+          .catch(() => {});
+      }
+
+      setCoachProfilePicturePath(newPath);
+      setCoachProfilePictureUrl(publicUrl);
+      setCoachProfilePictureLoadError(false);
+      setCoachProfilePictureVersion(Date.now());
+    } catch (e) {
+      console.error('Unexpected error uploading profile picture:', e);
+      alert(`Failed to upload your profile picture.\n\n${e?.message || 'Unknown error'}`);
+    } finally {
+      setCoachProfilePictureUploading(false);
+      // Allow selecting the same file again.
+      if (coachProfilePictureInputRef.current) {
+        coachProfilePictureInputRef.current.value = '';
+      }
+    }
+  };
+
+  const renderCoachHeaderRight = () => {
+    return (
+      <div className="flex items-center space-x-2 sm:space-x-4">
+        <input
+          ref={coachProfilePictureInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          onChange={handleCoachProfilePictureFileChange}
+        />
+        <button
+          type="button"
+          onClick={() => coachProfilePictureInputRef.current?.click()}
+          className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden border border-gray-200 bg-white hover:border-gray-300 transition-colors duration-200 flex items-center justify-center"
+          aria-label="Upload profile picture"
+          title="Upload profile picture"
+          disabled={coachProfilePictureUploading}
+        >
+          {coachProfilePictureUrl ? (
+            <img
+              src={`${coachProfilePictureUrl}${coachProfilePictureUrl.includes('?') ? '&' : '?'}v=${coachProfilePictureVersion || 0}`}
+              alt="Coach profile"
+              className="w-full h-full object-cover"
+              onError={() => {
+                // If the URL is invalid/expired/404, fall back to initials.
+                // Log the URL so we can debug whether it's a Storage access/path issue.
+                console.error('[PROFILE_PIC] Failed to load image URL:', coachProfilePictureUrl);
+                setCoachProfilePictureLoadError(true);
+              }}
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-r from-blue-600 to-purple-600 flex items-center justify-center text-white font-bold text-xs sm:text-sm">
+              {getCoachAvatarFallback}
+            </div>
+          )}
+          {coachProfilePictureUrl && coachProfilePictureLoadError && (
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-purple-600 flex items-center justify-center text-white font-bold text-xs sm:text-sm">
+              {getCoachAvatarFallback}
+            </div>
+          )}
+          <div className="absolute bottom-0 right-0 bg-white/90 backdrop-blur-sm rounded-full p-0.5 border border-gray-200">
+            <Camera className="h-3 w-3 text-gray-700" />
+          </div>
+          {coachProfilePictureUploading && (
+            <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+              <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-700 rounded-full animate-spin" />
+            </div>
+          )}
+        </button>
+
+        {/* Coach name */}
+        <div className="flex items-center space-x-2 text-xs sm:text-sm text-gray-600">
+          <span className="hidden md:inline">Coach: {coachName || user?.name || 'Unknown'}</span>
+          <span className="md:hidden">{coachName || user?.name || 'Unknown'}</span>
+        </div>
+      </div>
+    );
+  };
 
   // Fetch all available seasons and set default to current season
   useEffect(() => {
@@ -964,11 +1236,7 @@ const CoachDashboard = () => {
               </div>
               
               <div className="flex items-center space-x-2 sm:space-x-4">
-                {/* Coach name only */}
-                <div className="flex items-center space-x-2 text-xs sm:text-sm text-gray-600">
-                                  <span className="hidden md:inline">Coach: {coachName || user?.name || 'Unknown'}</span>
-                <span className="md:hidden">{coachName || user?.name || 'Unknown'}</span>
-                </div>
+                {renderCoachHeaderRight()}
               </div>
             </div>
           </div>
@@ -1224,11 +1492,7 @@ const CoachDashboard = () => {
             </div>
             
             <div className="flex items-center space-x-2 sm:space-x-4">
-              {/* Coach name only */}
-              <div className="flex items-center space-x-2 text-xs sm:text-sm text-gray-600">
-                <span className="hidden md:inline">Coach: {coachName || user?.name || 'Unknown'}</span>
-                <span className="md:hidden">{coachName || user?.name || 'Unknown'}</span>
-              </div>
+              {renderCoachHeaderRight()}
             </div>
           </div>
         </div>

@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BarChart3, TrendingUp, Calendar } from 'lucide-react';
+import { BarChart3 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../services/supabaseClient';
 import InsightsHeader from './components/InsightsHeader';
 import ChartsGrid from './components/ChartsGrid';
-import InsightsTable from './components/InsightsTable';
 import { useInsightsData } from './hooks/useInsightsData';
 
 const CoachInsights = () => {
@@ -41,7 +40,6 @@ const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase
   // Custom hook for data management
   const { 
     chartData, 
-    tableData, 
     loadingData, 
     errorData,
     refreshData 
@@ -96,7 +94,8 @@ const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase
         seasonsAbortController.current.abort();
       }
     };
-  }, []); // Remove selectedSeason dependency to prevent unnecessary re-runs
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only load seasons once on mount
 
   // Load available coaches (admin only)
   useEffect(() => {
@@ -163,7 +162,7 @@ const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase
         coachesAbortController.current.abort();
       }
     };
-  }, [isAdmin, selectedSeason, seasons.length]); // Use seasons.length instead of seasons array
+  }, [isAdmin, selectedSeason, seasons, defaultCoachEmail]);
 
   // Load available mesocycles based on selected season
   useEffect(() => {
@@ -222,7 +221,7 @@ const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase
         mesosAbortController.current.abort();
       }
     };
-  }, [seasonNumber, coachEmail]);
+  }, [seasonNumber, coachEmail, selectedMeso]);
 
   // Show loading state
   if (loading) {

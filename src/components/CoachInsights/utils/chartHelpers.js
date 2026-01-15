@@ -217,7 +217,7 @@ export const calculateStats = (data) => {
   return { min, max, avg, sum, count };
 };
 
-export default {
+const chartHelpers = {
   formatNumber,
   formatPercentage,
   formatCurrency,
@@ -235,3 +235,5 @@ export default {
   sortChartData,
   calculateStats
 };
+
+export default chartHelpers;
