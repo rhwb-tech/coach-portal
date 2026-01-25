@@ -19,7 +19,7 @@ const CoachDashboard = () => {
   const urlParams = new URLSearchParams(window.location.search);
   const overrideEmail = urlParams.get('email');
   const coachEmail = overrideEmail || user?.email;
-  const [season, setSeason] = useState(13); // Default to 13, will be updated from database
+  const [season, setSeason] = useState(null); // Will be set from rhwb_seasons where current = true
   
 
 
@@ -760,8 +760,8 @@ const CoachDashboard = () => {
   // Load all data and filter options on initial load only (only for Runner Metrics)
   useEffect(() => {
     const loadAllData = async () => {
-      // Only load data if we're on the dashboard view (Runner Metrics)
-      if (currentView !== 'dashboard') {
+      // Only load data if we're on the dashboard view (Runner Metrics) and season is loaded
+      if (currentView !== 'dashboard' || !season) {
         setLoading(false);
         return;
       }
