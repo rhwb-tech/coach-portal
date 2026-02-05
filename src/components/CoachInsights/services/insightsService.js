@@ -134,11 +134,11 @@ class InsightsService {
         }
       }
 
-      // Handle coach_metrics queries (feedback ratio)
-      if (sql.includes('coach_metrics')) {
+      // Handle mv_coach_metrics queries (feedback ratio)
+      if (sql.includes('mv_coach_metrics')) {
         
         try {
-          let query = supabase.from('coach_metrics');
+          let query = supabase.from('mv_coach_metrics');
           
           // Determine if this is the main query or average query based on SQL
           if (sql.includes('email_id AS coach_email')) {
@@ -661,7 +661,7 @@ class InsightsService {
       }
 
       // Add meso filtering for queries that support it (but exclude mesocycleProgress, athleteCompletion, feedbackRatio, and runnersLeftBehind)
-      if (selectedMeso && (config.sql.includes('rhwb_coach_input') || config.sql.includes('coach_metrics')) && config.id !== 'mesocycleProgress' && config.id !== 'athleteCompletion' && config.id !== 'feedbackRatio' && config.id !== 'runnersLeftBehind') {
+      if (selectedMeso && (config.sql.includes('rhwb_coach_input') || config.sql.includes('mv_coach_metrics')) && config.id !== 'mesocycleProgress' && config.id !== 'athleteCompletion' && config.id !== 'feedbackRatio' && config.id !== 'runnersLeftBehind') {
         // We need to modify the query to include meso filtering
         // This will be handled in the executeQuery method
         params.push(selectedMeso);

@@ -188,7 +188,7 @@ export const CHART_CONFIGS = {
         meso,
         (runs_with_comments::numeric
           / NULLIF((runs_with_comments + runs_with_no_comments), 0)) * 100 AS feedback_ratio
-      FROM coach_metrics
+      FROM mv_coach_metrics
       WHERE season = $1 AND email_id = $2 AND meso = $3
     `,
     avgSql: `
@@ -196,7 +196,7 @@ export const CHART_CONFIGS = {
         avg(runs_with_comments::numeric
           / NULLIF((runs_with_comments + runs_with_no_comments), 0)) * 100  AS total_avg_feedback_ratio,
         80::numeric AS target_ratio
-      FROM coach_metrics
+      FROM mv_coach_metrics
       WHERE season = $1 AND meso = $2
     `,
     dataTransform: (data, avgData) => {

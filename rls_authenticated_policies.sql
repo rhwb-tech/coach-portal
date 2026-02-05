@@ -147,7 +147,7 @@ ALTER view v_fs_teams ENABLE ROW LEVEL SECURITY;
 ALTER view v_fs_survey ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rhwb_coaches ENABLE ROW LEVEL SECURITY;
 ALTER view v_rhwb_meso_scores ENABLE ROW LEVEL SECURITY;
-ALTER TABLE coach_metrics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mv_coach_metrics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE coach_rlb ENABLE ROW LEVEL SECURITY;
 ALTER view v_comment_categories ENABLE ROW LEVEL SECURITY;
 ALTER view v_pulse_interactions ENABLE ROW LEVEL SECURITY;
@@ -161,7 +161,7 @@ DROP POLICY IF EXISTS "public_select_v_fs_teams" ON v_fs_teams;
 DROP POLICY IF EXISTS "public_select_v_fs_survey" ON v_fs_survey;
 DROP POLICY IF EXISTS "public_select_rhwb_coaches" ON rhwb_coaches;
 DROP POLICY IF EXISTS "public_select_v_rhwb_meso_scores" ON v_rhwb_meso_scores;
-DROP POLICY IF EXISTS "public_select_coach_metrics" ON coach_metrics;
+DROP POLICY IF EXISTS "public_select_mv_coach_metrics" ON mv_coach_metrics;
 DROP POLICY IF EXISTS "public_select_coach_rlb" ON coach_rlb;
 DROP POLICY IF EXISTS "public_select_v_comment_categories" ON v_comment_categories;
 DROP POLICY IF EXISTS "public_select_v_pulse_interactions" ON v_pulse_interactions;
@@ -203,7 +203,7 @@ CREATE POLICY "public_select_v_rhwb_meso_scores" ON v_rhwb_meso_scores
     USING (true);
 
 -- COACH_METRICS - Coach performance metrics (read-only analytics)
-CREATE POLICY "public_select_coach_metrics" ON coach_metrics
+CREATE POLICY "public_select_mv_coach_metrics" ON mv_coach_metrics
     FOR SELECT TO public
     USING (true);
 
@@ -235,7 +235,7 @@ GRANT SELECT ON v_fs_teams TO public;
 GRANT SELECT ON v_fs_survey TO public;
 GRANT SELECT ON rhwb_coaches TO public;
 GRANT SELECT ON v_rhwb_meso_scores TO public;
-GRANT SELECT ON coach_metrics TO public;
+GRANT SELECT ON mv_coach_metrics TO public;
 GRANT SELECT ON coach_rlb TO public;
 GRANT SELECT ON v_comment_categories TO public;
 GRANT SELECT ON v_pulse_interactions TO public;

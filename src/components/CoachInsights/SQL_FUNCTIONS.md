@@ -20,7 +20,7 @@ BEGIN
     a.season,
     a.coach,
     b.email_id as coach_email_id
-  FROM postgres.public.coach_metrics a
+  FROM postgres.public.mv_coach_metrics a
   JOIN rhwb_coaches b ON a.coach = b.coach
   WHERE a.season = season_param
   ORDER BY a.season, a.coach;
@@ -34,12 +34,12 @@ If you prefer using a view instead of a function:
 
 ```sql
 -- Create a view for coach metrics with email
-CREATE OR REPLACE VIEW coach_metrics_with_email AS
+CREATE OR REPLACE VIEW mv_coach_metrics_with_email AS
 SELECT DISTINCT 
   a.season,
   a.coach,
   b.email_id as coach_email_id
-FROM postgres.public.coach_metrics a
+FROM postgres.public.mv_coach_metrics a
 JOIN rhwb_coaches b ON a.coach = b.coach
 ORDER BY a.season, a.coach;
 ```
@@ -48,7 +48,7 @@ Then in the React component, you can use:
 
 ```javascript
 const { data, error } = await supabase
-  .from('coach_metrics_with_email')
+  .from('mv_coach_metrics_with_email')
   .select('season, coach, coach_email_id')
   .eq('season', selectedSeason)
   .order('coach', { ascending: true });
@@ -60,7 +60,7 @@ If neither functions nor views work in your setup, you can use the raw SQL query
 
 ```sql
 select distinct season, a.coach, b.email_id as coach_email_id 
-from postgres.public.coach_metrics a, rhwb_coaches b 
+from postgres.public.mv_coach_metrics a, rhwb_coaches b 
 where a.coach = b.coach 
   and season = [SEASON_ID]
 order by 1, 2
@@ -86,7 +86,7 @@ const { data, error } = await supabase
 ### Option 2: Using View
 ```javascript
 const { data, error } = await supabase
-  .from('coach_metrics_with_email')
+  .from('mv_coach_metrics_with_email')
   .select('season, coach, coach_email_id')
   .eq('season', selectedSeason)
   .order('coach', { ascending: true });
