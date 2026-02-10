@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Users, Clock, CheckCircle, XCircle, AlertCircle, RefreshCw, ExternalLink } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
+import { fetchActionComments } from '../services/cloudSqlService';
 import { useAuth } from '../contexts/AuthContext';
 import { finalSurgeService } from '../services/finalSurgeService';
 
@@ -101,8 +102,32 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
         throw deferralError;
       }
 
-      setTransferRequests(transferData || []);
-      setDeferralRequests(deferralData || []);
+      // Fetch comments from Cloud SQL and merge into request objects
+      const allRequests = [...(transferData || []), ...(deferralData || [])];
+      const allRequestIds = allRequests.map(r => r.id).filter(Boolean);
+
+      let commentsMap = {};
+      if (allRequestIds.length > 0) {
+        try {
+          const comments = await fetchActionComments(allRequestIds);
+          for (const c of comments) {
+            commentsMap[c.action_request_id] = c.comment;
+          }
+        } catch (commentError) {
+          console.error('Failed to fetch comments from Cloud SQL:', commentError);
+          // Fall back to Supabase comments field if Cloud SQL fails
+        }
+      }
+
+      // Merge Cloud SQL comments into requests (Cloud SQL takes priority over Supabase)
+      const mergeComments = (requests) =>
+        (requests || []).map(r => ({
+          ...r,
+          comments: commentsMap[r.id] || r.comments || null,
+        }));
+
+      setTransferRequests(mergeComments(transferData));
+      setDeferralRequests(mergeComments(deferralData));
 
       // Load runner and coach details for transfer requests
       if (transferData && transferData.length > 0) {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, Info, Save, TrendingUp, ChevronDown, Menu, X, MessageSquare, BookOpen, Users, BarChart3, Shield, Camera } from 'lucide-react';
 import { fetchCoachData, updateAthleteData, calculateCompletionRate, getAvatarInitials } from '../services/coachService';
+import { fetchQualScores, upsertQualScore } from '../services/cloudSqlService';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../services/supabaseClient';
 import { navigationLogger } from '../services/navigationLogger';
@@ -769,10 +770,24 @@ const CoachDashboard = () => {
       try {
         setLoading(true);
         const data = await fetchCoachData(coachEmail, season, 'All', '');
-        setAllAthletes(data);
-        
-        const uniqueDistances = [...new Set(data.map(a => a.race_distance).filter(Boolean))].sort();
-        const uniqueMeso = [...new Set(data.map(a => a.meso).filter(Boolean))].sort().reverse();
+
+        // Fetch qual scores from Cloud SQL and merge into athlete data
+        const seasonStr = `Season ${season}`;
+        const qualScores = await fetchQualScores(seasonStr, null, coachEmail);
+        const qualMap = {};
+        for (const qs of qualScores) {
+          const key = `${qs.email_id}_${qs.meso}`;
+          qualMap[key] = qs.qual_score;
+        }
+        const mergedData = data.map(athlete => ({
+          ...athlete,
+          meso_qual_score: qualMap[`${athlete.email_id}_${athlete.meso}`] || '',
+        }));
+
+        setAllAthletes(mergedData);
+
+        const uniqueDistances = [...new Set(mergedData.map(a => a.race_distance).filter(Boolean))].sort();
+        const uniqueMeso = [...new Set(mergedData.map(a => a.meso).filter(Boolean))].sort().reverse();
         
         setFilterOptions({
           distances: [
@@ -926,7 +941,7 @@ const CoachDashboard = () => {
   const handleSave = async (runnerId) => {
     try {
       const updatedData = cardData[runnerId];
-      
+
       // Validate override score before saving
       if (updatedData?.overrideScore) {
         const validation = validateOverrideScore(updatedData.overrideScore);
@@ -935,27 +950,32 @@ const CoachDashboard = () => {
           return;
         }
       }
-      
+
       setEditingCards(prev => ({ ...prev, [runnerId]: false }));
-      
-      // Save to database
+
+      // Save override score to Supabase
       await updateAthleteData(runnerId, updatedData, selectedMeso);
-      
+
+      // Save qual score to Cloud SQL (if provided)
+      if (updatedData?.qualitativeScore) {
+        const seasonStr = `Season ${season}`;
+        await upsertQualScore(runnerId, seasonStr, selectedMeso, updatedData.qualitativeScore);
+      }
+
       // Update the local state with the new data (only for the specific mesocycle)
-      setAllAthletes(prev => prev.map(athlete => 
+      setAllAthletes(prev => prev.map(athlete =>
         athlete.email_id === runnerId && athlete.meso === selectedMeso
-          ? { 
-              ...athlete, 
+          ? {
+              ...athlete,
               meso_score_override: updatedData.overrideScore || null,
               meso_qual_score: updatedData.qualitativeScore || athlete.meso_qual_score
             }
           : athlete
       ));
-      
+
       console.log('Successfully saved data for runner:', runnerId, updatedData);
     } catch (error) {
       console.error('Failed to save data:', error);
-      // You might want to show an error message to the user here
       alert('Failed to save changes. Please try again.');
     }
   };

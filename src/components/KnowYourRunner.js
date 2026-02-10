@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, Search, Users, Edit, Users as FamilyIcon, Clock, FileText, Plus, MessageCircle, Mail, Copy, Check, UserPlus } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
+import { upsertQualScore, upsertActionComment } from '../services/cloudSqlService';
 import RunnerCoachNotes from './RunnerCoachNotes';
 import RunnerFamilyMembers from './RunnerFamilyMembers';
 import RunnerClubHistory from './RunnerClubHistory';
@@ -443,13 +444,12 @@ const KnowYourRunner = ({
     try {
       // Get the season filter for the update query
       const seasonFilter = currentSeason.toString().startsWith('Season ') ? currentSeason : `Season ${currentSeason}`;
-      
-      // Update the database
+
+      // Update override score in Supabase (non-sensitive)
       const { error } = await supabase
         .from('rhwb_coach_input')
         .update({
-          meso_score_override: editFormData.meso_score_override || null,
-          meso_qual_score: editFormData.meso_qual_score || null
+          meso_score_override: editFormData.meso_score_override || null
         })
         .eq('coach_email', coachEmail)
         .eq('season', seasonFilter)
@@ -462,12 +462,17 @@ const KnowYourRunner = ({
         return;
       }
 
+      // Write qual score to Cloud SQL (HIPAA-sensitive)
+      if (editFormData.meso_qual_score) {
+        await upsertQualScore(selectedRunner.email_id, seasonFilter, editingMeso, editFormData.meso_qual_score);
+      }
+
       // Update local state
-      setSeasonMetrics(prev => 
-        prev?.map(metric => 
-          metric.meso === editingMeso 
-            ? { 
-                ...metric, 
+      setSeasonMetrics(prev =>
+        prev?.map(metric =>
+          metric.meso === editingMeso
+            ? {
+                ...metric,
                 meso_score_override: editFormData.meso_score_override || null,
                 meso_qual_score: editFormData.meso_qual_score || null
               }
@@ -479,10 +484,10 @@ const KnowYourRunner = ({
       setEditingMeso(null);
       setEditFormData({});
       setEditValidationErrors({});
-      
+
       // Show success message
       setEditMessage({ type: 'success', text: 'Metrics updated successfully!' });
-      
+
       // Clear message after 3 seconds
       setTimeout(() => {
         setEditMessage({ type: '', text: '' });
@@ -876,12 +881,12 @@ const KnowYourRunner = ({
     try {
       // Check authentication
       await supabase.auth.getSession();
-      
+
+      // Build transfer data WITHOUT comments (comments go to Cloud SQL)
       const transferData = {
         action_type: 'Transfer Runner',
         runner_email_id: transferRunner.email_id,
         requestor_email_id: coachEmail || 'unknown@example.com',
-        comments: transferComment.trim() || null,
         latest_row: true,
         current_race_distance: transferRunner.race_distance,
         current_program_level: transferRunnerLevel || null,
@@ -899,27 +904,45 @@ const KnowYourRunner = ({
         .from('rhwb_action_requests')
         .select('*')
         .limit(1);
-      
+
       if (testError) {
         console.error('Failed to read from table:', testError);
         alert('Cannot connect to table. Check Supabase configuration.');
         return;
       }
 
-      // Insert into rhwb_action_requests table
-      const { error } = await supabase
+      // Insert into rhwb_action_requests table (without comments)
+      const { data: insertedData, error } = await supabase
         .from('rhwb_action_requests')
-        .insert([transferData]);
+        .insert([transferData])
+        .select('id');
 
       if (error) {
         console.error('Failed to insert transfer request:', error);
         console.error('Error details:', error.message, error.details, error.hint);
         throw error;
       }
-      
+
+      // Write comment to Cloud SQL if provided
+      const commentText = transferComment.trim();
+      if (commentText && insertedData?.[0]?.id) {
+        try {
+          await upsertActionComment(
+            insertedData[0].id,
+            transferRunner.email_id,
+            selectedSeason,
+            commentText,
+            'Transfer Runner'
+          );
+        } catch (commentError) {
+          console.error('Failed to save comment to Cloud SQL:', commentError);
+          // Don't fail the whole transfer if comment save fails
+        }
+      }
+
       // Refresh pending status from database
       await fetchPendingActionRequests();
-      
+
       // Close modals and reset state
       setShowConfirmationModal(false);
       setTransferRunner(null);
@@ -933,7 +956,7 @@ const KnowYourRunner = ({
       setTransferComment('');
       setTransferDistanceMenuOpen(false);
       setTransferLevelMenuOpen(false);
-      
+
     } catch (error) {
       console.error('Failed to submit transfer request:', error);
       alert('Failed to submit transfer request. Check console for details.');
@@ -945,12 +968,12 @@ const KnowYourRunner = ({
     try {
       // Check authentication
       await supabase.auth.getSession();
-      
+
+      // Build defer data WITHOUT comments (comments go to Cloud SQL)
       const deferData = {
         action_type: 'Defer Runner',
         runner_email_id: deferRunner.email_id,
         requestor_email_id: coachEmail || 'unknown@example.com',
-        comments: deferComment.trim() || null,
         latest_row: true,
         status: 'pending',
         season: selectedSeason
@@ -961,17 +984,18 @@ const KnowYourRunner = ({
         .from('rhwb_action_requests')
         .select('*')
         .limit(1);
-      
+
       if (testError) {
         console.error('Failed to read from table:', testError);
         alert('Cannot connect to table. Check Supabase configuration.');
         return;
       }
 
-      // Insert into rhwb_action_requests table
-      const { error } = await supabase
+      // Insert into rhwb_action_requests table (without comments)
+      const { data: insertedData, error } = await supabase
         .from('rhwb_action_requests')
-        .insert([deferData]);
+        .insert([deferData])
+        .select('id');
 
       if (error) {
         console.error('Failed to insert defer request:', error);
@@ -979,11 +1003,26 @@ const KnowYourRunner = ({
         throw error;
       }
 
+      // Write comment to Cloud SQL if provided
+      const commentText = deferComment.trim();
+      if (commentText && insertedData?.[0]?.id) {
+        try {
+          await upsertActionComment(
+            insertedData[0].id,
+            deferRunner.email_id,
+            selectedSeason,
+            commentText,
+            'Defer Runner'
+          );
+        } catch (commentError) {
+          console.error('Failed to save comment to Cloud SQL:', commentError);
+          // Don't fail the whole defer if comment save fails
+        }
+      }
 
-      
       // Refresh pending status from database
       await fetchPendingActionRequests();
-      
+
       // Close modals and reset state
       setShowDeferConfirmationModal(false);
       setDeferRunner(null);

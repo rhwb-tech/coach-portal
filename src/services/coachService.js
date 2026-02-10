@@ -46,7 +46,6 @@ export const fetchCoachData = async (coachEmail, season = null, selectedDistance
         mileage_score,
         meso_score,
         meso_score_override,
-        meso_qual_score,
         season,
         planned_cross_trains,
         completed_cross_trains,
@@ -87,14 +86,13 @@ export const fetchCoachData = async (coachEmail, season = null, selectedDistance
   }
 };
 
-// Update athlete data in Supabase
+// Update athlete data in Supabase (override score only; qual score goes to Cloud SQL)
 export const updateAthleteData = async (emailId, updateData, selectedMeso) => {
   try {
     const { data, error } = await supabase
       .from('rhwb_coach_input')
       .update({
-        meso_score_override: updateData.overrideScore || null,
-        meso_qual_score: updateData.qualitativeScore || ''
+        meso_score_override: updateData.overrideScore || null
       })
       .eq('email_id', emailId)
       .eq('meso', selectedMeso)
@@ -106,7 +104,7 @@ export const updateAthleteData = async (emailId, updateData, selectedMeso) => {
     }
 
     return data;
-    
+
   } catch (error) {
     console.error('Update query error:', error);
     throw new Error('Failed to update athlete data');
