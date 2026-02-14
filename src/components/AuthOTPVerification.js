@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Key, ArrowLeft, CheckCircle } from 'lucide-react';
+import { Key, ArrowLeft } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 
 const AuthOTPVerification = ({ email, onBack, onSuccess }) => {
@@ -26,8 +26,23 @@ const AuthOTPVerification = ({ email, onBack, onSuccess }) => {
   }, [resendCountdown]);
 
   const handleOtpChange = (index, value) => {
-    if (value.length > 1) return; // Only allow single digit
-    
+    // Handle mobile autofill/paste (when multiple digits are pasted into one field)
+    if (value.length > 1) {
+      const pastedData = value.replace(/\D/g, '').slice(0, 6);
+      if (pastedData.length >= 1) {
+        const newOtp = [...otp];
+        for (let i = 0; i < 6; i++) {
+          newOtp[i] = pastedData[i] || '';
+        }
+        setOtp(newOtp);
+        setError('');
+        // Focus the last filled input or the last input
+        const lastFilledIndex = Math.min(pastedData.length - 1, 5);
+        inputRefs.current[lastFilledIndex]?.focus();
+      }
+      return;
+    }
+
     const newOtp = [...otp];
     newOtp[index] = value;
     setOtp(newOtp);
@@ -49,13 +64,16 @@ const AuthOTPVerification = ({ email, onBack, onSuccess }) => {
   const handlePaste = (e) => {
     e.preventDefault();
     const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-    if (pastedData.length === 6) {
+    if (pastedData.length >= 1) {
       const newOtp = [...otp];
       for (let i = 0; i < 6; i++) {
         newOtp[i] = pastedData[i] || '';
       }
       setOtp(newOtp);
       setError('');
+      // Focus the last filled input or the last input
+      const lastFilledIndex = Math.min(pastedData.length - 1, 5);
+      inputRefs.current[lastFilledIndex]?.focus();
     }
   };
 
@@ -166,6 +184,7 @@ const AuthOTPVerification = ({ email, onBack, onSuccess }) => {
                   onChange={(e) => handleOtpChange(index, e.target.value)}
                   onKeyDown={(e) => handleKeyDown(index, e)}
                   onPaste={handlePaste}
+                  autoComplete={index === 0 ? "one-time-code" : "off"}
                   className="w-12 h-12 text-center text-lg font-semibold border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   placeholder="•"
                 />

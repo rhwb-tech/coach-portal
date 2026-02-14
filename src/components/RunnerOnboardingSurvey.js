@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient';
 
-const RunnerOnboardingSurvey = ({ runner }) => {
+const RunnerOnboardingSurvey = ({ runner, selectedSeason }) => {
   const [surveyData, setSurveyData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -9,15 +9,21 @@ const RunnerOnboardingSurvey = ({ runner }) => {
   useEffect(() => {
     const loadSurveyData = async () => {
       if (!runner?.email_id) return;
-      
+
       try {
         setIsLoading(true);
-        const { data, error } = await supabase
+        let query = supabase
           .from('v_fs_survey')
           .select('name, email_id, "Full Question", answer')
-          .ilike('email_id', runner.email_id)
-          .order('"Full Question"');
-        
+          .ilike('email_id', runner.email_id);
+
+        // Add season filter if selectedSeason is provided
+        if (selectedSeason) {
+          query = query.eq('season', selectedSeason);
+        }
+
+        const { data, error } = await query.order('"Full Question"');
+
         if (!error && data) {
           setSurveyData(data);
         } else {
@@ -32,7 +38,7 @@ const RunnerOnboardingSurvey = ({ runner }) => {
     };
 
     loadSurveyData();
-  }, [runner?.email_id]);
+  }, [runner?.email_id, selectedSeason]);
 
   if (isLoading) {
     return (

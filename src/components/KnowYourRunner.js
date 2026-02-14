@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, Search, Users, Edit, Users as FamilyIcon, Clock, FileText, TrendingUp, Plus, MessageCircle, Mail, Copy, Check } from 'lucide-react';
+import { ChevronDown, Search, Users, Edit, Users as FamilyIcon, Clock, FileText, Plus, MessageCircle, Mail, Copy, Check, UserPlus } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
+import { upsertQualScore, upsertActionComment } from '../services/cloudSqlService';
 import RunnerCoachNotes from './RunnerCoachNotes';
 import RunnerFamilyMembers from './RunnerFamilyMembers';
 import RunnerClubHistory from './RunnerClubHistory';
 import RunnerOnboardingSurvey from './RunnerOnboardingSurvey';
 
-const KnowYourRunner = ({ 
-  cohortData = [], 
-  cohortLoading = false, 
+const KnowYourRunner = ({
+  cohortData = [],
+  cohortLoading = false,
   cohortError = null,
   selectedDistance = 'All',
   setSelectedDistance,
@@ -16,18 +17,34 @@ const KnowYourRunner = ({
   setSearchTerm,
   filterOptions = { distances: [] },
   currentSeason = null,
-  coachEmail = null
+  availableSeasons = [],
+  selectedSeason = null,
+  setSelectedSeason,
+  coachEmail = null,
+  isAdmin = false,
+  onAdminCoachChange = null,
+  onAdminRoleToggle = null,
+  adminRoleEnabled: adminRoleEnabledProp = false
 }) => {
   const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const [seasonMenuOpen, setSeasonMenuOpen] = useState(false);
   const [distanceMenuOpen, setDistanceMenuOpen] = useState(false);
   const [transferDistanceMenuOpen, setTransferDistanceMenuOpen] = useState(false);
+  const [coachesMenuOpen, setCoachesMenuOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState({});
   const [selectedRunner, setSelectedRunner] = useState(null);
   const [menuOpenFor, setMenuOpenFor] = useState(null); // Track which runner's menu is open
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [transferRunner, setTransferRunner] = useState(null);
+  const [transferRunnerLevel, setTransferRunnerLevel] = useState(null);
+  const [transferRunnerActivity, setTransferRunnerActivity] = useState(null);
+  const [transferRunnerSegment, setTransferRunnerSegment] = useState(null);
   const [selectedProgram, setSelectedProgram] = useState(null);
+  const [selectedNewLevel, setSelectedNewLevel] = useState(null);
+  const [selectedNewActivity, setSelectedNewActivity] = useState(null);
+  const [selectedNewSegment, setSelectedNewSegment] = useState(null);
+  const [transferLevelMenuOpen, setTransferLevelMenuOpen] = useState(false);
   const [transferComment, setTransferComment] = useState('');
   const [pendingTransfers, setPendingTransfers] = useState(new Set());
   
@@ -44,23 +61,53 @@ const KnowYourRunner = ({
   const [notesSaved, setNotesSaved] = useState(false);
   
   // Season metrics state
+  // eslint-disable-next-line no-unused-vars
   const [seasonMetrics, setSeasonMetrics] = useState(null);
+  // eslint-disable-next-line no-unused-vars
   const [metricsLoading, setMetricsLoading] = useState(false);
+  
+  // Race timings state
+  const [raceTimings, setRaceTimings] = useState(null);
+  const [raceTimingsLoading, setRaceTimingsLoading] = useState(false);
+  const [editingRaceTimings, setEditingRaceTimings] = useState(false);
+  const [raceTimingsFormData, setRaceTimingsFormData] = useState({
+    race_timings: '',
+    race_pr: false,
+    race_comments: '',
+    race_distance_completed: ''
+  });
+  const [raceTimingsMessage, setRaceTimingsMessage] = useState({ type: '', text: '' });
+  const [raceTimingsValidation, setRaceTimingsValidation] = useState({ race_timings: '' });
+  
+  // Admin role toggle state - use prop if provided, otherwise use local state
+  const [adminRoleEnabledLocal, setAdminRoleEnabledLocal] = useState(false);
+  const adminRoleEnabled = adminRoleEnabledProp !== undefined ? adminRoleEnabledProp : adminRoleEnabledLocal;
+  const [availableCoaches, setAvailableCoaches] = useState([]);
+  const [selectedAdminCoach, setSelectedAdminCoach] = useState(null); // Stores coach name
   
   // Edit state for meso metrics
   const [editingMeso, setEditingMeso] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [editValidationErrors, setEditValidationErrors] = useState({});
+  // eslint-disable-next-line no-unused-vars
   const [editMessage, setEditMessage] = useState({ type: '', text: '' });
   const [copiedItems, setCopiedItems] = useState({});
 
   // Fetch pending action requests from database
   const fetchPendingActionRequests = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('rhwb_action_requests')
         .select('runner_email_id, action_type, status')
-        .eq('status', 'pending');
+        .eq('status', 'pending')
+        .eq('latest_row', true);
+
+      // Add season filter if selectedSeason is available
+      if (selectedSeason) {
+        query = query.eq('season', selectedSeason);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error('Error fetching pending action requests:', error);
@@ -89,16 +136,77 @@ const KnowYourRunner = ({
   // Load pending action requests when component mounts
   useEffect(() => {
     fetchPendingActionRequests();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Load available coaches when admin toggle is enabled and season is selected
+  useEffect(() => {
+    // Clear selected coach when season changes
+    setSelectedAdminCoach(null);
+    if (onAdminCoachChange) {
+      onAdminCoachChange(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    
+    if (!adminRoleEnabled || !isAdmin || !selectedSeason) {
+      setAvailableCoaches([]);
+      return;
+    }
+
+    const loadCoaches = async () => {
+      try {
+        // Get distinct coaches from runner_season_info for the selected season
+        // Use selectedSeason directly (it should already be in the correct format like "Season 13")
+        console.log('Loading coaches for season:', selectedSeason);
+        
+        const { data, error } = await supabase
+          .from('runner_season_info')
+          .select('coach')
+          .eq('season', selectedSeason);
+        
+        if (error) {
+          console.error('Error loading coaches:', error);
+          console.error('Error details:', error.message, error.details);
+          setAvailableCoaches([]);
+          return;
+        }
+        
+        console.log('Coaches data from runner_season_info:', data);
+        
+        if (data && data.length > 0) {
+          // Get distinct coach names and sort them
+          const distinctCoaches = [...new Set(data.map(item => item.coach).filter(Boolean))].sort((a, b) => 
+            a.localeCompare(b)
+          );
+          
+          console.log('Distinct coaches:', distinctCoaches);
+          
+          // Store coach names directly (no need to lookup email_id)
+          setAvailableCoaches(distinctCoaches);
+        } else {
+          console.log('No coaches found for season:', selectedSeason);
+          setAvailableCoaches([]);
+        }
+      } catch (error) {
+        console.error('Error in loadCoaches:', error);
+        setAvailableCoaches([]);
+      }
+    };
+
+    loadCoaches();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminRoleEnabled, isAdmin, selectedSeason]);
 
   // Refresh pending status when cohort data changes (in case status was updated elsewhere)
   useEffect(() => {
     if (cohortData.length > 0) {
       fetchPendingActionRequests();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cohortData]);
 
   // Function to refresh pending status (can be called from parent components)
+  // eslint-disable-next-line no-unused-vars
   const refreshPendingStatus = () => {
     fetchPendingActionRequests();
   };
@@ -107,11 +215,16 @@ const KnowYourRunner = ({
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (!event.target.closest('.filter-dropdown') && !event.target.closest('.search-container')) {
+        setSeasonMenuOpen(false);
         setDistanceMenuOpen(false);
         setShowAutocomplete(false);
+        setCoachesMenuOpen(false);
       }
       if (!event.target.closest('.runner-menu')) {
         setMenuOpenFor(null);
+      }
+      if (!event.target.closest('.transfer-level-dropdown')) {
+        setTransferLevelMenuOpen(false);
       }
     };
 
@@ -168,6 +281,11 @@ const KnowYourRunner = ({
     if (sectionName === 'metrics' && selectedRunner && currentSeason && coachEmail) {
       fetchSeasonMetrics(selectedRunner.email_id);
     }
+    
+    // If opening race timings section and we have a selected runner, fetch the data
+    if (sectionName === 'raceTimings' && selectedRunner && selectedSeason) {
+      fetchRaceTimings(selectedRunner.email_id);
+    }
   };
   
   // Validation function for overridden meso score
@@ -192,6 +310,21 @@ const KnowYourRunner = ({
     const decimalPlaces = value.toString().split('.')[1]?.length || 0;
     if (decimalPlaces > 1) {
       return { isValid: false, message: 'Score can have at most one decimal place.' };
+    }
+    
+    return { isValid: true, message: '' };
+  };
+
+  // Validation function for race timings (HH:MM:SS format)
+  const validateRaceTimings = (value) => {
+    if (value === '' || value === null || value === undefined) {
+      return { isValid: true, message: '' }; // Allow empty values
+    }
+    
+    // Check if it matches HH:MM:SS format
+    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
+    if (!timeRegex.test(value)) {
+      return { isValid: false, message: 'Please enter time in HH:MM:SS format (e.g., 01:30:45).' };
     }
     
     return { isValid: true, message: '' };
@@ -230,7 +363,46 @@ const KnowYourRunner = ({
     }
   };
 
+  // Fetch race timings for a specific runner
+  const fetchRaceTimings = async (runnerEmail) => {
+    if (!runnerEmail || !selectedSeason) return;
+    
+    setRaceTimingsLoading(true);
+    
+    // Get season filter
+    const seasonFilter = selectedSeason.toString().startsWith('Season ') ? selectedSeason : `Season ${selectedSeason}`;
+    
+    try {
+      const { data, error } = await supabase
+        .from('runner_season_info')
+        .select('race_timings, race_pr, race_comments, race_distance, race_distance_completed')
+        .eq('email_id', runnerEmail)
+        .eq('season', seasonFilter)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching race timings:', error);
+        setRaceTimings(null);
+      } else {
+        setRaceTimings(data);
+        // Initialize form data with current values
+        setRaceTimingsFormData({
+          race_timings: data?.race_timings || '',
+          race_pr: data?.race_pr === true || data?.race_pr === 'true' || false,
+          race_comments: data?.race_comments || '',
+          race_distance_completed: data?.race_distance_completed || data?.race_distance || ''
+        });
+      }
+    } catch (error) {
+      console.error('Error in fetchRaceTimings:', error);
+      setRaceTimings(null);
+    } finally {
+      setRaceTimingsLoading(false);
+    }
+  };
+
   // Handle edit button click
+  // eslint-disable-next-line no-unused-vars
   const handleEditMeso = (mesoData) => {
     setEditingMeso(mesoData.meso);
     setEditFormData({
@@ -241,6 +413,7 @@ const KnowYourRunner = ({
   };
 
   // Handle edit form changes
+  // eslint-disable-next-line no-unused-vars
   const handleEditFormChange = (field, value) => {
     setEditFormData(prev => ({ ...prev, [field]: value }));
     
@@ -259,6 +432,7 @@ const KnowYourRunner = ({
   };
 
   // Handle save edit
+  // eslint-disable-next-line no-unused-vars
   const handleSaveEdit = async () => {
     // Validate before saving
     const overrideValidation = validateOverriddenScore(editFormData.meso_score_override);
@@ -270,13 +444,12 @@ const KnowYourRunner = ({
     try {
       // Get the season filter for the update query
       const seasonFilter = currentSeason.toString().startsWith('Season ') ? currentSeason : `Season ${currentSeason}`;
-      
-      // Update the database
+
+      // Update override score in Supabase (non-sensitive)
       const { error } = await supabase
         .from('rhwb_coach_input')
         .update({
-          meso_score_override: editFormData.meso_score_override || null,
-          meso_qual_score: editFormData.meso_qual_score || null
+          meso_score_override: editFormData.meso_score_override || null
         })
         .eq('coach_email', coachEmail)
         .eq('season', seasonFilter)
@@ -289,12 +462,17 @@ const KnowYourRunner = ({
         return;
       }
 
+      // Write qual score to Cloud SQL (HIPAA-sensitive)
+      if (editFormData.meso_qual_score) {
+        await upsertQualScore(selectedRunner.email_id, seasonFilter, editingMeso, editFormData.meso_qual_score);
+      }
+
       // Update local state
-      setSeasonMetrics(prev => 
-        prev?.map(metric => 
-          metric.meso === editingMeso 
-            ? { 
-                ...metric, 
+      setSeasonMetrics(prev =>
+        prev?.map(metric =>
+          metric.meso === editingMeso
+            ? {
+                ...metric,
                 meso_score_override: editFormData.meso_score_override || null,
                 meso_qual_score: editFormData.meso_qual_score || null
               }
@@ -306,10 +484,10 @@ const KnowYourRunner = ({
       setEditingMeso(null);
       setEditFormData({});
       setEditValidationErrors({});
-      
+
       // Show success message
       setEditMessage({ type: 'success', text: 'Metrics updated successfully!' });
-      
+
       // Clear message after 3 seconds
       setTimeout(() => {
         setEditMessage({ type: '', text: '' });
@@ -321,11 +499,117 @@ const KnowYourRunner = ({
   };
 
   // Handle cancel edit
+  // eslint-disable-next-line no-unused-vars
   const handleCancelEdit = () => {
     setEditingMeso(null);
     setEditFormData({});
     setEditValidationErrors({});
     setEditMessage({ type: '', text: '' });
+  };
+
+  // Handle race timings edit
+  const handleEditRaceTimings = () => {
+    setEditingRaceTimings(true);
+    setRaceTimingsMessage({ type: '', text: '' });
+  };
+
+  // Handle race timings form changes
+  const handleRaceTimingsFormChange = (field, value) => {
+    setRaceTimingsFormData(prev => ({ ...prev, [field]: value }));
+    
+    // Validate race timings field
+    if (field === 'race_timings') {
+      const validation = validateRaceTimings(value);
+      setRaceTimingsValidation(prev => ({ ...prev, race_timings: validation.isValid ? '' : validation.message }));
+    }
+  };
+
+  // Handle save race timings
+  const handleSaveRaceTimings = async () => {
+    if (!selectedRunner || !selectedSeason) return;
+
+    // Validate race timings before saving
+    const timingsValidation = validateRaceTimings(raceTimingsFormData.race_timings);
+    if (!timingsValidation.isValid) {
+      setRaceTimingsValidation(prev => ({ ...prev, race_timings: timingsValidation.message }));
+      return;
+    }
+
+    try {
+      const seasonFilter = selectedSeason.toString().startsWith('Season ') ? selectedSeason : `Season ${selectedSeason}`;
+      
+      // Check if record exists
+      const { data: existingData } = await supabase
+        .from('runner_season_info')
+        .select('email_id')
+        .eq('email_id', selectedRunner.email_id)
+        .eq('season', seasonFilter)
+        .single();
+
+      if (existingData) {
+        // Update existing record
+        const { error } = await supabase
+          .from('runner_season_info')
+          .update({
+            race_timings: raceTimingsFormData.race_timings || null,
+            race_pr: raceTimingsFormData.race_pr || null,
+            race_comments: raceTimingsFormData.race_comments || null,
+            race_distance_completed: raceTimingsFormData.race_distance_completed || null
+          })
+          .eq('email_id', selectedRunner.email_id)
+          .eq('season', seasonFilter);
+
+        if (error) throw error;
+      } else {
+        // Insert new record
+        const { error } = await supabase
+          .from('runner_season_info')
+          .insert([{
+            email_id: selectedRunner.email_id,
+            season: seasonFilter,
+            race_timings: raceTimingsFormData.race_timings || null,
+            race_pr: raceTimingsFormData.race_pr || null,
+            race_comments: raceTimingsFormData.race_comments || null,
+            race_distance_completed: raceTimingsFormData.race_distance_completed || null
+          }]);
+
+        if (error) throw error;
+      }
+
+      // Update local state
+      setRaceTimings({
+        race_timings: raceTimingsFormData.race_timings,
+        race_pr: raceTimingsFormData.race_pr,
+        race_comments: raceTimingsFormData.race_comments,
+        race_distance_completed: raceTimingsFormData.race_distance_completed
+      });
+
+      // Reset edit state
+      setEditingRaceTimings(false);
+      setRaceTimingsMessage({ type: 'success', text: 'Race timings updated successfully!' });
+      
+      // Clear message after 3 seconds
+      setTimeout(() => {
+        setRaceTimingsMessage({ type: '', text: '' });
+      }, 3000);
+    } catch (error) {
+      console.error('Error saving race timings:', error);
+      setRaceTimingsMessage({ type: 'error', text: 'Failed to update race timings. Please try again.' });
+    }
+  };
+
+  // Handle cancel race timings edit
+  const handleCancelRaceTimingsEdit = () => {
+    setEditingRaceTimings(false);
+    setRaceTimingsMessage({ type: '', text: '' });
+    setRaceTimingsValidation({ race_timings: '' });
+    // Reset form data to original values
+    setRaceTimingsFormData({
+      race_timings: raceTimings?.race_timings || '',
+      race_pr: raceTimings?.race_pr === true || raceTimings?.race_pr === 'true' || false,
+      race_comments: raceTimings?.race_comments || '',
+      race_distance_completed: raceTimings?.race_distance_completed || raceTimings?.race_distance || ''
+    });
   };
 
   // Copy to clipboard function
@@ -334,7 +618,7 @@ const KnowYourRunner = ({
       await navigator.clipboard.writeText(text);
       const key = `${runnerId}-${type}`;
       setCopiedItems(prev => ({ ...prev, [key]: true }));
-      
+
       // Reset the copied state after 2 seconds
       setTimeout(() => {
         setCopiedItems(prev => ({ ...prev, [key]: false }));
@@ -342,6 +626,35 @@ const KnowYourRunner = ({
     } catch (err) {
       console.error('Failed to copy to clipboard:', err);
     }
+  };
+
+  // Generate and download VCF file
+  const downloadVCF = (runner) => {
+    const firstName = runner.first_name || '';
+    const lastName = runner.last_name || '';
+    const fullName = runner.runner_name || `${firstName} ${lastName}`.trim() || 'Unknown';
+
+    // Create VCF content
+    const vcfContent = [
+      'BEGIN:VCARD',
+      'VERSION:3.0',
+      `FN:${fullName}`,
+      `N:${lastName};${firstName};;;`,
+      `TEL;TYPE=CELL:${runner.phone_no || ''}`,
+      'ORG:RHWB',
+      'END:VCARD'
+    ].join('\n');
+
+    // Create blob and download
+    const blob = new Blob([vcfContent], { type: 'text/vcard' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${fullName}.vcf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
   };
 
   // Handle runner selection
@@ -365,11 +678,73 @@ const KnowYourRunner = ({
     setMenuOpenFor(menuOpenFor === runnerId ? null : runnerId);
   };
 
+  const normalizeActivity = (activityValue) => {
+    if (!activityValue) return null;
+    const v = String(activityValue).trim().toLowerCase();
+    if (!v) return null;
+    if (v.startsWith('walk')) return 'Walk';
+    if (v.startsWith('run')) return 'Run';
+    return 'Run';
+  };
+
+  const normalizeSegment = (segmentValue) => {
+    if (!segmentValue) return null;
+    const v = String(segmentValue).trim().toLowerCase();
+    if (!v) return null;
+    if (v === 'lite') return 'Lite';
+    if (v === 'pro') return 'Pro';
+    if (v === 'masters') return 'Masters';
+    return null;
+  };
+
   // Handle transfer runner
-  const handleTransferRunner = (runner) => {
+  const handleTransferRunner = async (runner) => {
     setTransferRunner(runner);
-    setShowTransferModal(true);
     setMenuOpenFor(null); // Close the menu
+    
+    // Fetch the current level from runner_season_info
+    if (runner?.email_id && selectedSeason) {
+      try {
+        const seasonFilter = selectedSeason.toString().startsWith('Season ') ? selectedSeason : `Season ${selectedSeason}`;
+        const { data, error } = await supabase
+          .from('runner_season_info')
+          .select('level, activity, segment')
+          .eq('email_id', runner.email_id)
+          .eq('season', seasonFilter)
+          .single();
+        
+        if (!error && data) {
+          setTransferRunnerLevel(data.level || null);
+          const currentActivity = normalizeActivity(data.activity);
+          setTransferRunnerActivity(currentActivity);
+          setSelectedNewActivity(currentActivity);
+          const currentSegment = normalizeSegment(data.segment);
+          setTransferRunnerSegment(currentSegment);
+          setSelectedNewSegment(currentSegment);
+        } else {
+          setTransferRunnerLevel(null);
+          setTransferRunnerActivity(null);
+          setSelectedNewActivity(null);
+          setTransferRunnerSegment(null);
+          setSelectedNewSegment(null);
+        }
+      } catch (error) {
+        console.error('Error fetching runner level:', error);
+        setTransferRunnerLevel(null);
+        setTransferRunnerActivity(null);
+        setSelectedNewActivity(null);
+        setTransferRunnerSegment(null);
+        setSelectedNewSegment(null);
+      }
+    } else {
+      setTransferRunnerLevel(null);
+      setTransferRunnerActivity(null);
+      setSelectedNewActivity(null);
+      setTransferRunnerSegment(null);
+      setSelectedNewSegment(null);
+    }
+    
+    setShowTransferModal(true);
   };
 
   // Handle defer runner
@@ -465,6 +840,10 @@ const KnowYourRunner = ({
   // Handle program selection (updates selected program in transfer modal)
   const handleProgramSelection = (newProgram) => {
     setSelectedProgram(newProgram);
+    // Reset level when program changes (Lite doesn't have levels)
+    if (newProgram === 'Lite') {
+      setSelectedNewLevel(null);
+    }
   };
 
   // Handle submit button click (shows confirmation modal)
@@ -473,8 +852,22 @@ const KnowYourRunner = ({
       alert('Please select a program first.');
       return;
     }
+    if (!selectedNewActivity) {
+      alert('Please select a new activity (Run or Walk).');
+      return;
+    }
+    if (!selectedNewSegment) {
+      alert('Please select a new segment (Lite, Pro, or Masters).');
+      return;
+    }
+    // For race distance programs, require level selection
+    if (selectedProgram !== 'Lite' && ['5K', '10K', 'Half Marathon', 'Full Marathon'].includes(selectedProgram) && !selectedNewLevel) {
+      alert('Please select a level for the new program.');
+      return;
+    }
     setShowTransferModal(false);
     setTransferDistanceMenuOpen(false);
+    setTransferLevelMenuOpen(false);
     setShowConfirmationModal(true);
   };
 
@@ -488,14 +881,22 @@ const KnowYourRunner = ({
     try {
       // Check authentication
       await supabase.auth.getSession();
-      
+
+      // Build transfer data WITHOUT comments (comments go to Cloud SQL)
       const transferData = {
         action_type: 'Transfer Runner',
         runner_email_id: transferRunner.email_id,
         requestor_email_id: coachEmail || 'unknown@example.com',
-        comments: transferComment.trim() || null,
-        current_program: transferRunner.race_distance,
-        new_program: selectedProgram
+        latest_row: true,
+        current_race_distance: transferRunner.race_distance,
+        current_program_level: transferRunnerLevel || null,
+        current_activity: transferRunnerActivity || null,
+        current_segment: transferRunnerSegment || null,
+        new_race_distance: selectedProgram,
+        new_program_level: selectedNewLevel || null,
+        new_activity: selectedNewActivity || null,
+        new_segment: selectedNewSegment || null,
+        season: selectedSeason
       };
 
       // First, let's test if we can read from the table
@@ -503,34 +904,59 @@ const KnowYourRunner = ({
         .from('rhwb_action_requests')
         .select('*')
         .limit(1);
-      
+
       if (testError) {
         console.error('Failed to read from table:', testError);
         alert('Cannot connect to table. Check Supabase configuration.');
         return;
       }
 
-      // Insert into rhwb_action_requests table
-      const { error } = await supabase
+      // Insert into rhwb_action_requests table (without comments)
+      const { data: insertedData, error } = await supabase
         .from('rhwb_action_requests')
-        .insert([transferData]);
+        .insert([transferData])
+        .select('id');
 
       if (error) {
         console.error('Failed to insert transfer request:', error);
         console.error('Error details:', error.message, error.details, error.hint);
         throw error;
       }
-      
+
+      // Write comment to Cloud SQL if provided
+      const commentText = transferComment.trim();
+      if (commentText && insertedData?.[0]?.id) {
+        try {
+          await upsertActionComment(
+            insertedData[0].id,
+            transferRunner.email_id,
+            selectedSeason,
+            commentText,
+            'Transfer Runner'
+          );
+        } catch (commentError) {
+          console.error('Failed to save comment to Cloud SQL:', commentError);
+          // Don't fail the whole transfer if comment save fails
+        }
+      }
+
       // Refresh pending status from database
       await fetchPendingActionRequests();
-      
+
       // Close modals and reset state
       setShowConfirmationModal(false);
       setTransferRunner(null);
+      setTransferRunnerLevel(null);
+      setTransferRunnerActivity(null);
+      setTransferRunnerSegment(null);
       setSelectedProgram(null);
+      setSelectedNewLevel(null);
+      setSelectedNewActivity(null);
+      setSelectedNewSegment(null);
       setTransferComment('');
       setTransferDistanceMenuOpen(false);
-      
+      setTransferLevelMenuOpen(false);
+
     } catch (error) {
       console.error('Failed to submit transfer request:', error);
       alert('Failed to submit transfer request. Check console for details.');
@@ -542,13 +968,15 @@ const KnowYourRunner = ({
     try {
       // Check authentication
       await supabase.auth.getSession();
-      
+
+      // Build defer data WITHOUT comments (comments go to Cloud SQL)
       const deferData = {
         action_type: 'Defer Runner',
         runner_email_id: deferRunner.email_id,
         requestor_email_id: coachEmail || 'unknown@example.com',
-        comments: deferComment.trim() || null,
-        status: 'pending'
+        latest_row: true,
+        status: 'pending',
+        season: selectedSeason
       };
 
       // First, let's test if we can read from the table
@@ -556,17 +984,18 @@ const KnowYourRunner = ({
         .from('rhwb_action_requests')
         .select('*')
         .limit(1);
-      
+
       if (testError) {
         console.error('Failed to read from table:', testError);
         alert('Cannot connect to table. Check Supabase configuration.');
         return;
       }
 
-      // Insert into rhwb_action_requests table
-      const { error } = await supabase
+      // Insert into rhwb_action_requests table (without comments)
+      const { data: insertedData, error } = await supabase
         .from('rhwb_action_requests')
-        .insert([deferData]);
+        .insert([deferData])
+        .select('id');
 
       if (error) {
         console.error('Failed to insert defer request:', error);
@@ -574,11 +1003,26 @@ const KnowYourRunner = ({
         throw error;
       }
 
+      // Write comment to Cloud SQL if provided
+      const commentText = deferComment.trim();
+      if (commentText && insertedData?.[0]?.id) {
+        try {
+          await upsertActionComment(
+            insertedData[0].id,
+            deferRunner.email_id,
+            selectedSeason,
+            commentText,
+            'Defer Runner'
+          );
+        } catch (commentError) {
+          console.error('Failed to save comment to Cloud SQL:', commentError);
+          // Don't fail the whole defer if comment save fails
+        }
+      }
 
-      
       // Refresh pending status from database
       await fetchPendingActionRequests();
-      
+
       // Close modals and reset state
       setShowDeferConfirmationModal(false);
       setDeferRunner(null);
@@ -610,6 +1054,92 @@ const KnowYourRunner = ({
           <div className="flex flex-col gap-3 sm:gap-4">
             {/* Filter Chips */}
             <div className="flex flex-wrap gap-2 sm:gap-4 items-center">
+              {/* Season Chip */}
+              <div className="relative filter-dropdown z-50">
+                <button
+                  onClick={() => setSeasonMenuOpen(!seasonMenuOpen)}
+                  className="flex items-center space-x-1 sm:space-x-2 px-3 sm:px-4 py-2 bg-purple-50 text-purple-700 rounded-full font-medium hover:bg-purple-100 transition-colors duration-200 border border-purple-200 text-sm sm:text-base"
+                >
+                  <span>{selectedSeason || 'Select Season'}</span>
+                  <ChevronDown className={`h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-200 ${seasonMenuOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {seasonMenuOpen && (
+                  <div className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50 min-w-[150px] max-h-[300px] overflow-y-auto">
+                    {availableSeasons.map((season) => (
+                      <button
+                        key={season.season}
+                        onClick={() => {
+                          setSelectedSeason(season.season);
+                          setSeasonMenuOpen(false);
+                        }}
+                        className={`w-full text-left px-4 py-2 hover:bg-gray-50 transition-colors ${
+                          selectedSeason === season.season ? 'bg-purple-50 text-purple-700 font-medium' : 'text-gray-700'
+                        }`}
+                      >
+                        {season.season}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Coaches Dropdown - Only shown when admin toggle is enabled */}
+              {adminRoleEnabled && (
+                <div className="relative filter-dropdown z-50">
+                  <button
+                    onClick={() => {
+                      if (!selectedSeason) {
+                        alert('Please select a season first');
+                        return;
+                      }
+                      setCoachesMenuOpen(!coachesMenuOpen);
+                    }}
+                    disabled={!selectedSeason || availableCoaches.length === 0}
+                    className={`flex items-center space-x-1 sm:space-x-2 px-3 sm:px-4 py-2 rounded-full font-medium transition-colors duration-200 border text-sm sm:text-base ${
+                      !selectedSeason || availableCoaches.length === 0
+                        ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                        : 'bg-green-50 text-green-700 hover:bg-green-100 border-green-200'
+                    }`}
+                  >
+                    <span>
+                      {!selectedSeason 
+                        ? 'Select Season First' 
+                        : selectedAdminCoach 
+                          ? selectedAdminCoach
+                          : availableCoaches.length === 0
+                            ? 'No Coaches'
+                            : 'Select Coach'
+                      }
+                    </span>
+                    <ChevronDown className={`h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-200 ${coachesMenuOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {coachesMenuOpen && selectedSeason && availableCoaches.length > 0 && (
+                    <div className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50 min-w-[200px] max-h-[300px] overflow-y-auto">
+                      {availableCoaches.map((coachName) => (
+                        <button
+                          key={coachName}
+                          onClick={() => {
+                            setSelectedAdminCoach(coachName);
+                            setCoachesMenuOpen(false);
+                            // Notify parent component of coach change (pass coach name)
+                            if (onAdminCoachChange) {
+                              onAdminCoachChange(coachName);
+                            }
+                          }}
+                          className={`w-full text-left px-4 py-2 hover:bg-gray-50 transition-colors ${
+                            selectedAdminCoach === coachName ? 'bg-green-50 text-green-700 font-medium' : 'text-gray-700'
+                          }`}
+                        >
+                          {coachName}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Race Distance Chip */}
               <div className="relative filter-dropdown z-40">
                 <button
@@ -619,7 +1149,7 @@ const KnowYourRunner = ({
                   <span>{selectedDistance}</span>
                   <ChevronDown className={`h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-200 ${distanceMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
-                
+
                 {distanceMenuOpen && (
                   <div className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50 min-w-[120px]">
                     {distanceOptions.map((option) => (
@@ -669,6 +1199,39 @@ const KnowYourRunner = ({
                   </div>
                 )}
               </div>
+
+              {/* Admin Role Toggle - Only visible for admin users */}
+              {isAdmin && (
+                <div className="flex items-center gap-2 ml-auto">
+                  <label className="text-sm font-medium text-gray-700">Admin Role</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newValue = !adminRoleEnabled;
+                      if (adminRoleEnabledProp === undefined) {
+                        setAdminRoleEnabledLocal(newValue);
+                      }
+                      if (onAdminRoleToggle) {
+                        onAdminRoleToggle(newValue);
+                      }
+                      if (!newValue) {
+                        setSelectedAdminCoach(null);
+                      }
+                    }}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                      adminRoleEnabled ? 'bg-blue-600' : 'bg-gray-300'
+                    }`}
+                    role="switch"
+                    aria-checked={adminRoleEnabled}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        adminRoleEnabled ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -761,6 +1324,13 @@ const KnowYourRunner = ({
                                   <Copy className="h-3 w-3 sm:h-4 sm:w-4" />
                                 )}
                               </button>
+                              <button
+                                onClick={() => downloadVCF(runner)}
+                                className="text-blue-500 hover:text-blue-700 transition-colors"
+                                title="Add to Contacts"
+                              >
+                                <UserPlus className="h-3 w-3 sm:h-4 sm:w-4" />
+                              </button>
                             </div>
                           )}
                         </div>
@@ -799,9 +1369,54 @@ const KnowYourRunner = ({
                             runner.race_distance === 'Full Marathon' ? 'bg-purple-100 text-purple-700' :
                             'bg-gray-100 text-gray-700'
                           }`}>
-                            {runner.race_distance}
+                            {/* Mobile: Show abbreviated version */}
+                            <span className="sm:hidden">
+                              {runner.race_distance === 'Half Marathon' ? 'HM' :
+                               runner.race_distance === 'Full Marathon' ? 'FM' :
+                               runner.race_distance}
+                            </span>
+                            {/* Desktop: Show full version */}
+                            <span className="hidden sm:inline">
+                              {runner.race_distance}
+                            </span>
                           </span>
-                          
+
+                          {/* Contact Icons - Mobile Only */}
+                          {runner.phone_no && (
+                            <div className="flex sm:hidden items-center space-x-2">
+                              <a
+                                href={`tel:${runner.phone_no}`}
+                                className="text-blue-500 hover:text-blue-700 transition-colors"
+                                title="Click to call"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                                  <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+                                </svg>
+                              </a>
+                              <a
+                                href={`https://wa.me/${runner.phone_no.replace(/\D/g, '')}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-green-600 hover:text-green-700 transition-colors"
+                                title="Open WhatsApp"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MessageCircle className="h-4 w-4" />
+                              </a>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  downloadVCF(runner);
+                                }}
+                                className="text-blue-500 hover:text-blue-700 transition-colors"
+                                title="Add to Contacts"
+                              >
+                                <UserPlus className="h-4 w-4" />
+                              </button>
+                            </div>
+                          )}
+
                           {/* Location - Desktop only */}
                           {runner.location && (
                             <div className="hidden sm:flex items-center text-xs sm:text-sm text-gray-500">
@@ -886,58 +1501,6 @@ const KnowYourRunner = ({
                 {selectedRunner?.email_id === runner.email_id && (
                   <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 sm:p-6 mt-4">
                     <div className="space-y-2 sm:space-y-3">
-                    {/* Coach Notes */}
-                    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                      <button
-                        onClick={() => toggleSection('coachNotes')}
-                        className="w-full flex items-center justify-between p-3 sm:p-4 hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-center space-x-2 sm:space-x-3">
-                          <Edit className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
-                          <span className="font-medium text-gray-900 text-sm sm:text-base">Coach Notes</span>
-                        </div>
-                        <ChevronDown className={`h-4 w-4 sm:h-5 sm:w-5 text-gray-400 transition-transform duration-200 ${
-                          expandedSections.coachNotes ? 'rotate-180' : ''
-                        }`} />
-                      </button>
-                      {expandedSections.coachNotes && (
-                        <div className="px-3 sm:px-4 pb-3 sm:pb-4">
-                          {/* Informational Message */}
-                          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                            <div className="flex items-start space-x-2">
-                              <svg className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                              <div className="text-sm text-blue-800">
-                                <p className="font-medium mb-1">Internal Notes Only</p>
-                                <p className="text-blue-700">Coach notes are for internal purposes only. The runner cannot see these notes.</p>
-                              </div>
-                            </div>
-                          </div>
-                          
-                          {/* Add Note Button */}
-                          <div className="mb-4">
-                            <button
-                              onClick={() => {
-                                if (typeof window !== 'undefined') {
-                                  window.dispatchEvent(new CustomEvent('addNote', { 
-                                    detail: { runnerEmail: runner.email_id } 
-                                  }));
-                                }
-                              }}
-                              className="flex items-center space-x-2 px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-sm font-medium"
-                            >
-                              <Plus className="h-4 w-4" />
-                              <span>Add Note</span>
-                            </button>
-                          </div>
-                          
-                          {/* Notes Content */}
-                          <RunnerCoachNotes runner={runner} />
-                        </div>
-                      )}
-                    </div>
-
                     {/* Bio - Mobile Only */}
                     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden sm:hidden">
                       <button
@@ -969,7 +1532,7 @@ const KnowYourRunner = ({
                                   <span>{runner.gender_age}</span>
                                 </div>
                               )}
-                              
+
                               {/* Phone Number */}
                               {runner.phone_no && (
                                 <div className="flex items-center text-sm text-gray-600 space-x-2">
@@ -977,7 +1540,7 @@ const KnowYourRunner = ({
                                     <svg className="h-4 w-4 mr-2 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
                                       <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
                                     </svg>
-                                    <a 
+                                    <a
                                       href={`tel:${runner.phone_no}`}
                                       className="hover:text-blue-600 hover:underline transition-colors"
                                       title="Click to call"
@@ -985,7 +1548,7 @@ const KnowYourRunner = ({
                                       {runner.phone_no}
                                     </a>
                                   </div>
-                                  <a 
+                                  <a
                                     href={`https://wa.me/${runner.phone_no.replace(/\D/g, '')}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
@@ -1005,14 +1568,21 @@ const KnowYourRunner = ({
                                       <Copy className="h-4 w-4" />
                                     )}
                                   </button>
+                                  <button
+                                    onClick={() => downloadVCF(runner)}
+                                    className="text-blue-500 hover:text-blue-700 transition-colors"
+                                    title="Add to Contacts"
+                                  >
+                                    <UserPlus className="h-4 w-4" />
+                                  </button>
                                 </div>
                               )}
-                              
+
                               {/* Email */}
                               {runner.email_id && (
                                 <div className="flex items-center text-sm text-gray-600 space-x-2">
                                   <Mail className="h-4 w-4 mr-2 text-gray-400" />
-                                  <a 
+                                  <a
                                     href={`mailto:${runner.email_id}`}
                                     className="hover:text-blue-600 hover:underline transition-colors"
                                     title="Send email"
@@ -1032,7 +1602,7 @@ const KnowYourRunner = ({
                                   </button>
                                 </div>
                               )}
-                              
+
                               {/* Location */}
                               {runner.location && (
                                 <div className="flex items-center text-sm text-gray-600">
@@ -1044,6 +1614,58 @@ const KnowYourRunner = ({
                               )}
                             </div>
                           </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Coach Notes */}
+                    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                      <button
+                        onClick={() => toggleSection('coachNotes')}
+                        className="w-full flex items-center justify-between p-3 sm:p-4 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center space-x-2 sm:space-x-3">
+                          <Edit className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
+                          <span className="font-medium text-gray-900 text-sm sm:text-base">Coach Notes</span>
+                        </div>
+                        <ChevronDown className={`h-4 w-4 sm:h-5 sm:w-5 text-gray-400 transition-transform duration-200 ${
+                          expandedSections.coachNotes ? 'rotate-180' : ''
+                        }`} />
+                      </button>
+                      {expandedSections.coachNotes && (
+                        <div className="px-3 sm:px-4 pb-3 sm:pb-4">
+                          {/* Informational Message */}
+                          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <div className="flex items-start space-x-2">
+                              <svg className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <div className="text-sm text-blue-800">
+                                <p className="font-medium mb-1">Internal Notes Only</p>
+                                <p className="text-blue-700">Coach notes are for internal purposes only. The runner cannot see these notes.</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Add Note Button */}
+                          <div className="mb-4">
+                            <button
+                              onClick={() => {
+                                if (typeof window !== 'undefined') {
+                                  window.dispatchEvent(new CustomEvent('addNote', {
+                                    detail: { runnerEmail: runner.email_id }
+                                  }));
+                                }
+                              }}
+                              className="flex items-center space-x-2 px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-sm font-medium"
+                            >
+                              <Plus className="h-4 w-4" />
+                              <span>Add Note</span>
+                            </button>
+                          </div>
+
+                          {/* Notes Content */}
+                          <RunnerCoachNotes runner={runner} />
                         </div>
                       )}
                     </div>
@@ -1106,162 +1728,191 @@ const KnowYourRunner = ({
                       </button>
                       {expandedSections.onboarding && (
                         <div className="px-3 sm:px-4 pb-3 sm:pb-4">
-                          <RunnerOnboardingSurvey runner={runner} />
+                          <RunnerOnboardingSurvey runner={runner} selectedSeason={selectedSeason} />
                         </div>
                       )}
                     </div>
 
-                    {/* Season Metrics & Performance */}
+                    {/* Race Timings */}
                     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                       <button
-                        onClick={() => toggleSection('metrics')}
+                        onClick={() => toggleSection('raceTimings')}
                         className="w-full flex items-center justify-between p-3 sm:p-4 hover:bg-gray-50 transition-colors"
                       >
                         <div className="flex items-center space-x-2 sm:space-x-3">
-                          <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-red-600" />
-                          <span className="font-medium text-gray-900 text-sm sm:text-base">Season Metrics & Performance</span>
+                          <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
+                          <span className="font-medium text-gray-900 text-sm sm:text-base">Race Timings</span>
                         </div>
                         <ChevronDown className={`h-4 w-4 sm:h-5 sm:w-5 text-gray-400 transition-transform duration-200 ${
-                          expandedSections.metrics ? 'rotate-180' : ''
+                          expandedSections.raceTimings ? 'rotate-180' : ''
                         }`} />
                       </button>
-                      {expandedSections.metrics && (
+                      {expandedSections.raceTimings && (
                         <div className="px-3 sm:px-4 pb-3 sm:pb-4">
                           {!selectedRunner ? (
                             <div className="text-gray-600 text-center py-4">
-                              Select a runner to view their season metrics
+                              Select a runner to view their race timings
                             </div>
-                          ) : metricsLoading ? (
+                          ) : raceTimingsLoading ? (
                             <div className="text-gray-600 text-center py-4">
-                              Loading metrics...
+                              Loading race timings...
                             </div>
-                          ) : seasonMetrics && seasonMetrics.length > 0 ? (
-                            <div className="space-y-6">
-                              {/* Inline message display */}
-                              {editMessage.text && (
+                          ) : (
+                            <div className="space-y-4">
+                              {/* Message display */}
+                              {raceTimingsMessage.text && (
                                 <div className={`p-3 rounded-lg text-sm font-medium ${
-                                  editMessage.type === 'success' 
+                                  raceTimingsMessage.type === 'success' 
                                     ? 'bg-green-100 text-green-800 border border-green-200' 
                                     : 'bg-red-100 text-red-800 border border-red-200'
                                 }`}>
-                                  {editMessage.text}
+                                  {raceTimingsMessage.text}
                                 </div>
                               )}
                               
-                              {/* Sort mesos in descending order and limit to 4 */}
-                              {seasonMetrics
-                                .sort((a, b) => {
-                                  // Extract meso number and sort descending
-                                  const mesoA = parseInt(a.meso?.replace(/\D/g, '') || '0');
-                                  const mesoB = parseInt(b.meso?.replace(/\D/g, '') || '0');
-                                  return mesoB - mesoA;
-                                })
-                                .slice(0, 4)
-                                .map((metric, index) => (
-                                  <div key={index} className="bg-gray-50 rounded-lg p-4">
-                                    {/* Meso Section Header */}
-                                    <div className="mb-4 flex items-center justify-between">
-                                      <h4 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2 flex-1">
-                                        {metric.meso || 'Meso N/A'}
-                                      </h4>
-                                      {editingMeso === metric.meso ? (
-                                        <div className="flex space-x-2 ml-4">
-                                          <button
-                                            onClick={handleSaveEdit}
-                                            className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors"
-                                          >
-                                            Save
-                                          </button>
-                                          <button
-                                            onClick={handleCancelEdit}
-                                            className="px-3 py-1 bg-gray-500 text-white text-xs rounded hover:bg-gray-600 transition-colors"
-                                          >
-                                            Cancel
-                                          </button>
-                                        </div>
-                                      ) : (
-                                        <button
-                                          onClick={() => handleEditMeso(metric)}
-                                          className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors ml-4"
-                                        >
-                                          Edit
-                                        </button>
-                                      )}
+                              {/* Edit button */}
+                              <div className="flex justify-end">
+                                {editingRaceTimings ? (
+                                  <div className="flex space-x-2">
+                                    <button
+                                      onClick={handleSaveRaceTimings}
+                                      className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors"
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      onClick={handleCancelRaceTimingsEdit}
+                                      className="px-3 py-1 bg-gray-500 text-white text-xs rounded hover:bg-gray-600 transition-colors"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={handleEditRaceTimings}
+                                    className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                                  >
+                                    Edit
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Race Timings Form */}
+                              <div className="space-y-4">
+                                {/* Race Timings, PR, and Race Distance in same row */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  {/* Race Timings */}
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Race Timings</label>
+                                    {editingRaceTimings ? (
+                                      <div>
+                                        <input
+                                          type="text"
+                                          value={raceTimingsFormData.race_timings}
+                                          onChange={(e) => handleRaceTimingsFormChange('race_timings', e.target.value)}
+                                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                            raceTimingsValidation.race_timings ? 'border-red-300' : 'border-gray-300'
+                                          }`}
+                                          placeholder="HH:MM:SS (e.g., 01:30:45)"
+                                          maxLength={8}
+                                        />
+                                        {raceTimingsValidation.race_timings && (
+                                          <div className="text-xs text-red-600 mt-1">
+                                            {raceTimingsValidation.race_timings}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="text-sm text-gray-900 bg-gray-50 p-3 rounded-lg min-h-[40px]">
+                                        {raceTimings?.race_timings || 'No race timings recorded'}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* PR Checkbox */}
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">PR?</label>
+                                    {editingRaceTimings ? (
+                                      <div className="flex items-center space-x-2">
+                                        <input
+                                          type="checkbox"
+                                          checked={raceTimingsFormData.race_pr}
+                                          onChange={(e) => handleRaceTimingsFormChange('race_pr', e.target.checked)}
+                                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                        />
+                                        <span className="text-sm text-gray-700">
+                                          {raceTimingsFormData.race_pr ? 'Yes, this is a PR' : 'No, not a PR'}
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <div className="text-sm text-gray-900 bg-gray-50 p-3 rounded-lg min-h-[40px] flex items-center">
+                                        {raceTimings?.race_pr ? (
+                                          <span className="text-green-600 font-medium">✓ Yes, this is a PR</span>
+                                        ) : (
+                                          <span className="text-gray-500">No, not a PR</span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Race Distance */}
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Race Distance</label>
+                                    {editingRaceTimings ? (
+                                      <select
+                                        value={raceTimingsFormData.race_distance_completed}
+                                        onChange={(e) => handleRaceTimingsFormChange('race_distance_completed', e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                      >
+                                        <option value="">Select Race Distance</option>
+                                        <option value="5K">5K</option>
+                                        <option value="10K">10K</option>
+                                        <option value="Half Marathon">Half Marathon</option>
+                                        <option value="Marathon">Marathon</option>
+                                        <option value="Other">Other</option>
+                                      </select>
+                                    ) : (
+                                      <div className="text-sm text-gray-900 bg-gray-50 p-3 rounded-lg min-h-[40px] flex items-center">
+                                        {raceTimings?.race_distance_completed || raceTimings?.race_distance || 'No race distance recorded'}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Race Comments - Full width */}
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">Race Comments</label>
+                                  {editingRaceTimings ? (
+                                    <textarea
+                                      value={raceTimingsFormData.race_comments}
+                                      onChange={(e) => handleRaceTimingsFormChange('race_comments', e.target.value)}
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                                      rows={3}
+                                      placeholder="Enter race comments..."
+                                    />
+                                  ) : (
+                                    <div className="text-sm text-gray-900 bg-gray-50 p-3 rounded-lg min-h-[60px]">
+                                      {raceTimings?.race_comments || 'No race comments recorded'}
                                     </div>
-                                    
-                                    <div className="space-y-4">
-                                      {/* Strength Training & Distance in same row */}
-                                      <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                          <label className="block text-xs font-medium text-gray-600 mb-1">Strength Training</label>
-                                          <div className="text-sm text-gray-900">
-                                            {metric.completed_strength_trains || 0} / {metric.planned_strength_trains || 0}
-                                          </div>
-                                        </div>
-                                        
-                                        <div>
-                                          <label className="block text-xs font-medium text-gray-600 mb-1">Distance</label>
-                                          <div className="text-sm text-gray-900">
-                                            {metric.completed_distance || 0} / {metric.planned_distance || 0}
-                                          </div>
-                                        </div>
-                                      </div>
-                                      
-                                      {/* Meso Scores */}
-                                      <div className="space-y-2">
-                                        <div className="text-xs text-gray-700">
-                                          <span className="font-medium">Calculated Meso Score:</span> {metric.meso_score || 'N/A'}
-                                        </div>
-                                        <div className="text-xs text-gray-700">
-                                          <span className="font-medium">Overridden Meso Score:</span>
-                                          {editingMeso === metric.meso ? (
-                                            <div className="mt-1">
-                                              <input
-                                                type="number"
-                                                step="0.1"
-                                                min="1"
-                                                max="5"
-                                                value={editFormData.meso_score_override || ''}
-                                                onChange={(e) => handleEditFormChange('meso_score_override', e.target.value)}
-                                                className={`w-full px-2 py-1 text-xs border rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
-                                                  editValidationErrors.meso_score_override ? 'border-red-300' : 'border-gray-300'
-                                                }`}
-                                                placeholder="Enter score (1-5)"
-                                              />
-                                              {editValidationErrors.meso_score_override && (
-                                                <div className="text-xs text-red-600 mt-1">
-                                                  {editValidationErrors.meso_score_override}
-                                                </div>
-                                              )}
-                                            </div>
-                                          ) : (
-                                            <span className="ml-1">{metric.meso_score_override || 'N/A'}</span>
-                                          )}
-                                        </div>
-                                        <div className="text-xs text-gray-700">
-                                          <span className="font-medium">Qualitative Score:</span>
-                                          {editingMeso === metric.meso ? (
-                                            <div className="mt-1">
-                                              <input
-                                                type="text"
-                                                value={editFormData.meso_qual_score || ''}
-                                                onChange={(e) => handleEditFormChange('meso_qual_score', e.target.value)}
-                                                className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                                placeholder="Enter qualitative score"
-                                              />
-                                            </div>
-                                          ) : (
-                                            <span className="ml-1">{metric.meso_qual_score || 'N/A'}</span>
-                                          )}
-                                        </div>
-                                      </div>
+                                  )}
+                                </div>
+
+                                {/* Helpful message for coaches */}
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-4">
+                                  <div className="flex items-start space-x-2">
+                                    <div className="flex-shrink-0">
+                                      <svg className="h-4 w-4 text-blue-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                      </svg>
+                                    </div>
+                                    <div className="text-sm text-blue-800">
+                                      <p className="font-medium mb-1">Race Timing Guidelines:</p>
+                                      <p>For races with a timing chip, record the official chip time. You can verify it from the race results or ask the runner for a screenshot as proof.</p>
+                                      <p className="mt-2">For races without a timing chip (e.g., logged in Strava or Final Surge), record the elapsed time, not the moving time.</p>
                                     </div>
                                   </div>
-                                ))}
-                            </div>
-                          ) : (
-                            <div className="text-gray-600 text-center py-4">
-                              No season metrics found for this runner
+                                </div>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -1285,72 +1936,98 @@ const KnowYourRunner = ({
 
       {/* Transfer Program Modal */}
       {showTransferModal && transferRunner && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
             {/* Header */}
-            <div className="flex items-center space-x-3 p-6 border-b border-gray-200">
+            <div className="flex items-center space-x-3 p-6 border-b border-gray-200 flex-shrink-0">
               <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
               </svg>
               <h2 className="text-xl font-bold text-gray-900">Transfer Program</h2>
             </div>
 
-            {/* Content */}
-            <div className="p-6">
+            {/* Content - Scrollable */}
+            <div className="p-6 overflow-y-auto flex-1">
               <p className="text-gray-700 mb-2">
                 Transfer <span className="font-semibold">{transferRunner.runner_name}</span>
               </p>
-              <p className="text-gray-600 mb-4">
-                Current program: <span className="text-blue-600 font-medium">{transferRunner.race_distance}</span>
-              </p>
-              <p className="text-gray-700 mb-4">Select a new program:</p>
+              <div className="bg-gray-50 rounded-lg p-4 mb-4 border border-gray-200">
+                <p className="text-sm text-gray-600 mb-2">Current Program Details:</p>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                  {/* Row 1 */}
+                  <div>
+                    <span className="text-xs text-gray-500">Activity:</span>
+                    <span className="text-blue-600 font-medium ml-2">{transferRunnerActivity || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500">Segment:</span>
+                    <span className="text-blue-600 font-medium ml-2">{transferRunnerSegment || 'N/A'}</span>
+                  </div>
 
-              {/* Program Options */}
-              <div className="space-y-2 mb-6">
-                {/* Lite Option */}
-                <button
-                  onClick={() => handleProgramSelection('Lite')}
-                  className={`w-full flex items-center justify-between p-3 text-left border rounded-lg transition-colors ${
-                    selectedProgram === 'Lite' 
-                      ? 'border-blue-500 bg-blue-50 text-blue-700' 
-                      : 'border-gray-200 hover:bg-gray-50 text-gray-900'
-                  }`}
-                >
-                  <span className="font-medium">Lite</span>
-                  {selectedProgram === 'Lite' ? (
-                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  )}
-                </button>
-
-                {/* OR Separator */}
-                <div className="flex items-center justify-center py-2">
-                  <div className="flex-1 border-t border-gray-300"></div>
-                  <span className="px-3 text-sm font-medium text-gray-500 bg-white">OR</span>
-                  <div className="flex-1 border-t border-gray-300"></div>
+                  {/* Row 2 */}
+                  <div>
+                    <span className="text-xs text-gray-500">Race Distance:</span>
+                    <span className="text-blue-600 font-medium ml-2">{transferRunner.race_distance || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500">Level:</span>
+                    <span className="text-blue-600 font-medium ml-2">{transferRunnerLevel || 'N/A'}</span>
+                  </div>
                 </div>
+              </div>
+              <p className="text-gray-700 mb-4">Select the new details (in order):</p>
 
-                {/* Race Distance Dropdown */}
+              {/* Activity Selection */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  New Activity
+                </label>
+                <select
+                  value={selectedNewActivity || ''}
+                  onChange={(e) => setSelectedNewActivity(e.target.value || null)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                >
+                  <option value="" disabled>Select activity</option>
+                  <option value="Run">Run</option>
+                  <option value="Walk">Walk</option>
+                </select>
+              </div>
+
+              {/* Segment Selection */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  New Segment
+                </label>
+                <select
+                  value={selectedNewSegment || ''}
+                  onChange={(e) => setSelectedNewSegment(e.target.value || null)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                >
+                  <option value="" disabled>Select segment</option>
+                  <option value="Lite">Lite</option>
+                  <option value="Pro">Pro</option>
+                  <option value="Masters">Masters</option>
+                </select>
+              </div>
+
+              {/* Race Distance / Program Selection */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  New Race Distance
+                </label>
                 <div className="relative">
                   <button
                     onClick={() => setTransferDistanceMenuOpen(!transferDistanceMenuOpen)}
                     className={`w-full flex items-center justify-between p-3 text-left border rounded-lg transition-colors ${
-                      selectedProgram && selectedProgram !== 'Lite' && ['5K', '10K', 'Half Marathon', 'Full Marathon'].includes(selectedProgram)
-                        ? 'border-blue-500 bg-blue-50 text-blue-700' 
-                        : 'border-gray-200 hover:bg-gray-50 text-gray-900'
+                      selectedProgram ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50 text-gray-900'
                     }`}
                   >
                     <span className="font-medium">
-                      {selectedProgram && selectedProgram !== 'Lite' ? selectedProgram : 'Select Race Distance'}
+                      {selectedProgram || 'Select Race Distance'}
                     </span>
                     <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${transferDistanceMenuOpen ? 'rotate-180' : ''}`} />
                   </button>
-                  
+
                   {transferDistanceMenuOpen && (
                     <div className="absolute top-full left-0 mt-1 w-full bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
                       {['5K', '10K', 'Half Marathon', 'Full Marathon'].map((distance) => (
@@ -1370,11 +2047,44 @@ const KnowYourRunner = ({
                 </div>
               </div>
 
-              {/* Selected Program Display */}
-              {selectedProgram && (
-                <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm text-blue-700 mb-1">Selected Program:</p>
-                  <p className="font-medium text-blue-900">{selectedProgram}</p>
+              {/* Level Selection - Only show for race distance programs (not Lite) */}
+              {selectedProgram && selectedProgram !== 'Lite' && ['5K', '10K', 'Half Marathon', 'Full Marathon'].includes(selectedProgram) && (
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    New Level
+                  </label>
+                  <div className="relative transfer-level-dropdown">
+                    <button
+                      onClick={() => setTransferLevelMenuOpen(!transferLevelMenuOpen)}
+                      className={`w-full flex items-center justify-between p-3 text-left border rounded-lg transition-colors ${
+                        selectedNewLevel
+                          ? 'border-blue-500 bg-blue-50 text-blue-700' 
+                          : 'border-gray-200 hover:bg-gray-50 text-gray-900'
+                      }`}
+                    >
+                      <span className="font-medium">
+                        {selectedNewLevel || 'Select Level'}
+                      </span>
+                      <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${transferLevelMenuOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {transferLevelMenuOpen && (
+                      <div className="absolute bottom-full left-0 mb-1 w-full bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                        {['Exp', 'Speed', 'Std'].map((level) => (
+                          <button
+                            key={level}
+                            onClick={() => {
+                              setSelectedNewLevel(level);
+                              setTransferLevelMenuOpen(false);
+                            }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors"
+                          >
+                            {level}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -1394,14 +2104,21 @@ const KnowYourRunner = ({
             </div>
 
             {/* Footer */}
-            <div className="flex justify-between p-6 border-t border-gray-200">
+            <div className="flex justify-between p-6 border-t border-gray-200 flex-shrink-0">
               <button
                 onClick={() => {
                   setShowTransferModal(false);
                   setTransferRunner(null);
+                  setTransferRunnerLevel(null);
+                  setTransferRunnerActivity(null);
+                  setTransferRunnerSegment(null);
                   setSelectedProgram(null);
+                  setSelectedNewLevel(null);
+                  setSelectedNewActivity(null);
+                  setSelectedNewSegment(null);
                   setTransferComment('');
                   setTransferDistanceMenuOpen(false);
+                  setTransferLevelMenuOpen(false);
                 }}
                 className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
               >
@@ -1442,11 +2159,37 @@ const KnowYourRunner = ({
               <div className="bg-gray-50 rounded-lg p-4 mb-6">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">From:</span>
-                  <span className="font-medium text-gray-900">{transferRunner.race_distance}</span>
+                  <div className="text-right">
+                    <span className="font-medium text-gray-900">{transferRunner.race_distance}</span>
+                    {transferRunnerLevel && (
+                      <span className="text-gray-500 text-sm ml-2">({transferRunnerLevel})</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-gray-600">Activity:</span>
+                  <div className="text-right">
+                    <span className="font-medium text-gray-900">{transferRunnerActivity || 'N/A'}</span>
+                    <span className="text-gray-500 text-sm ml-2">→</span>
+                    <span className="font-medium text-blue-600 ml-2">{selectedNewActivity || 'N/A'}</span>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-gray-600">Segment:</span>
+                  <div className="text-right">
+                    <span className="font-medium text-gray-900">{transferRunnerSegment || 'N/A'}</span>
+                    <span className="text-gray-500 text-sm ml-2">→</span>
+                    <span className="font-medium text-blue-600 ml-2">{selectedNewSegment || 'N/A'}</span>
+                  </div>
                 </div>
                 <div className="flex justify-between items-center mt-2">
                   <span className="text-gray-600">To:</span>
-                  <span className="font-medium text-blue-600">{selectedProgram}</span>
+                  <div className="text-right">
+                    <span className="font-medium text-blue-600">{selectedProgram}</span>
+                    {selectedNewLevel && (
+                      <span className="text-gray-500 text-sm ml-2">({selectedNewLevel})</span>
+                    )}
+                  </div>
                 </div>
                 {transferComment.trim() && (
                   <div className="mt-3 pt-3 border-t border-gray-200">
@@ -1463,7 +2206,13 @@ const KnowYourRunner = ({
                 onClick={() => {
                   setShowConfirmationModal(false);
                   setTransferRunner(null);
+                  setTransferRunnerLevel(null);
+                  setTransferRunnerActivity(null);
+                  setTransferRunnerSegment(null);
                   setSelectedProgram(null);
+                  setSelectedNewLevel(null);
+                  setSelectedNewActivity(null);
+                  setSelectedNewSegment(null);
                   setTransferComment('');
                 }}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"

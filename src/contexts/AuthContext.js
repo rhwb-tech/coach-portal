@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
+import { navigationLogger } from '../services/navigationLogger';
 
 const AuthContext = createContext();
 
@@ -25,70 +26,24 @@ const validateEmailAccess = async (email) => {
 
   try {
     // Check Supabase configuration first
-          if (!process.env.REACT_APP_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL.includes('<YOUR_SUPABASE_URL>')) {
-        const fallbackRole = determineUserRole(email);
-        // Save the fallback role to session
-        saveSessionUserRole(email, fallbackRole);
-        return { isValid: true, role: fallbackRole };
-      }
-    
-          if (!process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY.includes('<YOUR_SUPABASE_ANON_KEY>')) {
-        const fallbackRole = determineUserRole(email);
-        // Save the fallback role to session
-        saveSessionUserRole(email, fallbackRole);
-        return { isValid: true, role: fallbackRole };
-      }
-    
-    // First, test the connection with a simple query and aggressive timeout
-    let connectionTestPassed = false;
-    
-    try {
-      // Add a very short timeout for the connection test
-      const connectionTimeout = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Connection test timeout')), 3000); // 3 second timeout
-      });
-      
-      // Test connection using the v_rhwb_roles view
-      const connectionTest = supabase
-        .from('v_rhwb_roles')
-        .select('count')
-        .limit(1);
-      
-      const { error: testError } = await Promise.race([connectionTest, connectionTimeout]);
-      
-      if (testError) {
-        if (testError.code === 'PGRST116') {
-          // Fallback to email-based role determination
-          const fallbackRole = determineUserRole(email);
-          // Save the fallback role to session
-          saveSessionUserRole(email, fallbackRole);
-          return { isValid: true, role: fallbackRole };
-        }
-      } else {
-        connectionTestPassed = true;
-      }
-    } catch (testErr) {
-      // Fallback to email-based role determination
+    if (!process.env.REACT_APP_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL.includes('<YOUR_SUPABASE_URL>')) {
       const fallbackRole = determineUserRole(email);
-      // Save the fallback role to session
       saveSessionUserRole(email, fallbackRole);
       return { isValid: true, role: fallbackRole };
     }
     
-    // Only proceed with database query if connection test passed
-    if (!connectionTestPassed) {
+    if (!process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY.includes('<YOUR_SUPABASE_ANON_KEY>')) {
       const fallbackRole = determineUserRole(email);
-      // Save the fallback role to session
       saveSessionUserRole(email, fallbackRole);
       return { isValid: true, role: fallbackRole };
     }
     
-    // Add timeout protection for the main query
+    // Simplified validation with shorter timeout
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Database query timeout')), 5000); // 5 second timeout
+      setTimeout(() => reject(new Error('Database query timeout')), 3000); // 3 second timeout
     });
     
-    // Query the v_rhwb_roles view (similar to v_pulse_roles in Pulse app)
+    // Query the v_rhwb_roles view
     const queryPromise = supabase
       .from('v_rhwb_roles')
       .select('email_id, role, full_name')
@@ -97,11 +52,8 @@ const validateEmailAccess = async (email) => {
 
     const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
 
-
     if (error) {
-      // Check for specific error types
       if (error.code === 'PGRST116') {
-        // This means no rows found - user doesn't exist in either table
         return { 
           isValid: false, 
           error: 'This email address is not authorized to access RHWB Connect. Please use the same email address that you registered with RHWB or contact support for access.' 
@@ -109,7 +61,6 @@ const validateEmailAccess = async (email) => {
       }
       
       if (error.code === '42P01') {
-        // Table or view doesn't exist
         return { 
           isValid: false, 
           error: 'Database configuration error. Please contact support.' 
@@ -118,17 +69,14 @@ const validateEmailAccess = async (email) => {
       
       if (error.message?.includes('timeout')) {
         const fallbackRole = determineUserRole(email);
-        // Save the fallback role to session
         saveSessionUserRole(email, fallbackRole);
         return { isValid: true, role: fallbackRole };
       }
       
-      // Log other errors for debugging but don't expose to user
-      console.warn('Database query error:', error);
-      return { 
-        isValid: false, 
-        error: 'This email address is not authorized to access RHWB Connect. Please use the same email address that you registered with RHWB or contact support for access.' 
-      };
+      // For any other error, use fallback
+      const fallbackRole = determineUserRole(email);
+      saveSessionUserRole(email, fallbackRole);
+      return { isValid: true, role: fallbackRole };
     }
 
     if (!data) {
@@ -143,17 +91,6 @@ const validateEmailAccess = async (email) => {
     return { isValid: true, role: data.role, fullName: data.full_name };
 
   } catch (error) {
-    // Log the error for debugging but don't expose it to the user
-    console.warn('Authentication validation error:', error);
-    
-    if (error instanceof Error) {
-      if (error.message.includes('timeout')) {
-        const fallbackRole = determineUserRole(email);
-        saveSessionUserRole(email, fallbackRole);
-        return { isValid: true, role: fallbackRole };
-      }
-    }
-    
     // If we can't validate due to database issues, fall back to email-based role
     const fallbackRole = determineUserRole(email);
     saveSessionUserRole(email, fallbackRole);
@@ -270,37 +207,7 @@ const determineUserRole = (email) => {
   }
 };
 
-// Helper function to compare user objects
-const isUserChanged = (currentUser, newUser) => {
-  if (!currentUser && !newUser) return false; // Both null
-  if (!currentUser || !newUser) return true; // One is null, other isn't
-  
-  // Compare key properties
-  return (
-    currentUser.email !== newUser.email ||
-    currentUser.role !== newUser.role ||
-    currentUser.name !== newUser.name ||
-    currentUser.id !== newUser.id
-  );
-};
 
-// Helper function to compare session objects
-const isSessionChanged = (currentSession, newSession) => {
-  if (!currentSession && !newSession) return false; // Both null
-  if (!currentSession || !newSession) return true; // One is null, other isn't
-  
-  // For empty mock sessions, consider them unchanged if both are empty objects
-  if (Object.keys(currentSession).length === 0 && Object.keys(newSession).length === 0) {
-    return false;
-  }
-  
-  // Compare key session properties
-  return (
-    currentSession.access_token !== newSession.access_token ||
-    currentSession.user?.id !== newSession.user?.id ||
-    currentSession.user?.email !== newSession.user?.email
-  );
-};
 
 // Helper function to validate and handle URL override
 const validateUrlOverride = async (overrideEmail, hasActiveSession = false) => {
@@ -341,15 +248,35 @@ export const AuthProvider = ({ children }) => {
   const [isEmailSent, setIsEmailSent] = useState(false);
   const [authError, setAuthError] = useState(null);
   
-  // Helper to update session only if changed
-  const updateSession = useCallback((newSession) => {
-    if (isSessionChanged(session, newSession)) {
-      setSession(newSession);
-    }
-  }, [session]);
+  // Ref to track if we're processing auth state changes
+  const isProcessingAuthChange = useRef(false);
+  
+  // Ref to track the last logged user to prevent duplicate logging
+  const lastLoggedUser = useRef(null);
+  
+  // Ref to track if initialization has already run
+  const hasInitialized = useRef(false);
 
-  // Initialize auth state
+  // Helper to log navigation only once per user
+  const logNavigationOnce = useCallback((email, event) => {
+    const userKey = `${email}_${event}`;
+    if (lastLoggedUser.current !== userKey) {
+      lastLoggedUser.current = userKey;
+      navigationLogger.logNavigation(email, event).catch(err => {
+        console.warn('Navigation logging failed:', err);
+      });
+    }
+  }, []);
+
+  // Initialize auth state - REMOVED user dependency to prevent loops
   useEffect(() => {
+    // Prevent multiple initializations
+    if (hasInitialized.current) {
+      return;
+    }
+    
+    hasInitialized.current = true;
+    
     // Add cleanup function for when browser is closed/refreshed
     const handleBeforeUnload = () => {
       clearOverrideUserRole();
@@ -362,53 +289,56 @@ export const AuthProvider = ({ children }) => {
     const getInitialSession = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
+        
         if (error) {
           console.error('Error getting session:', error);
           setAuthError(error.message);
-        } else {
-          setSession(session);
+          setIsLoading(false);
+          return;
+        }
+        
+        setSession(session);
+        
+        if (session?.user) {
+          // First, check if we have a valid session role
+          const sessionRole = getSessionUserRole(session.user.email);
+          let validation;
           
-          if (session?.user) {
-            // First, check if we have a valid session role
-            const sessionRole = getSessionUserRole(session.user.email);
-            let validation;
-            
-            if (sessionRole) {
-              validation = { isValid: true, role: sessionRole.role, fromSession: true };
-            } else {
-              // Validate the authenticated user against roles table
-              validation = await validateEmailAccess(session.user.email);
-            }
-            
-            if (validation.isValid && validation.role) {
-              const authUser = {
-                email: session.user.email,
-                role: validation.role,
-                name: validation.fullName || session.user.user_metadata?.name || session.user.email,
-                id: session.user.id
-              };
-              
-              // Only update user state if there's an actual change
-              if (isUserChanged(user, authUser)) {
-                setUser(authUser);
-              }
-            } else {
-              // User is authenticated but not authorized - log them out
-              await supabase.auth.signOut();
-              setUser(null);
-            }
+          if (sessionRole) {
+            validation = { isValid: true, role: sessionRole.role, fromSession: true };
           } else {
-            // No active session - URL overrides are not allowed without authentication
-            const urlParams = new URLSearchParams(window.location.search);
-            const overrideEmail = urlParams.get('email');
-            
-            if (overrideEmail) {
-              setAuthError('Authentication required. Please sign in to use URL override functionality.');
-            }
-            
-            // Clear any existing override data since there's no session
-            clearOverrideUserRole();
+            // Validate the authenticated user against roles table
+            validation = await validateEmailAccess(session.user.email);
           }
+          
+          if (validation.isValid && validation.role) {
+            const authUser = {
+              email: session.user.email,
+              role: validation.role,
+              name: validation.fullName || session.user.user_metadata?.name || session.user.email,
+              id: session.user.id
+            };
+            
+            // Set user state directly (no comparison needed for initial load)
+            setUser(authUser);
+            // Log user sign-in (only once)
+            logNavigationOnce(authUser.email, 'User Signed In');
+          } else {
+            // User is authenticated but not authorized - log them out
+            await supabase.auth.signOut();
+            setUser(null);
+          }
+        } else {
+          // No active session - URL overrides are not allowed without authentication
+          const urlParams = new URLSearchParams(window.location.search);
+          const overrideEmail = urlParams.get('email');
+          
+          if (overrideEmail) {
+            setAuthError('Authentication required. Please sign in to use URL override functionality.');
+          }
+          
+          // Clear any existing override data since there's no session
+          clearOverrideUserRole();
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
@@ -418,21 +348,46 @@ export const AuthProvider = ({ children }) => {
       }
     };
 
-    getInitialSession();
+    // Add a timeout to prevent getting stuck
+    const timeoutId = setTimeout(() => {
+      setIsLoading(false);
+    }, 10000); // 10 second timeout
+
+    getInitialSession().finally(() => {
+      clearTimeout(timeoutId);
+    });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        // Only process auth state changes for actual auth events, not visibility changes
-        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
-          updateSession(session);
-          
+        // Prevent multiple simultaneous auth state change processing
+        if (isProcessingAuthChange.current) {
+          return;
+        }
+        
+        isProcessingAuthChange.current = true;
+        
+        try {
+          // Only process auth state changes for actual auth events, not visibility changes
+          if (event !== 'SIGNED_IN' && event !== 'SIGNED_OUT' && event !== 'TOKEN_REFRESHED') {
+            // Ignore other events to prevent clearing user state
+            return;
+          }
+
+          // Update session directly instead of using updateSession function
+          setSession(session);
+
           // Clear override data when user signs out
           if (event === 'SIGNED_OUT') {
             clearOverrideUserRole();
+            // Reset last logged user to allow logging again for new sign-ins
+            lastLoggedUser.current = null;
+            // Clear user state and exit early for sign out
+            setUser(null);
+            setIsLoading(false);
+            return;
           }
-        }
-        
+
         // Check for URL parameter override - only process if there's an active session
         const urlParams = new URLSearchParams(window.location.search);
         const overrideEmail = urlParams.get('email');
@@ -450,10 +405,10 @@ export const AuthProvider = ({ children }) => {
               id: 'override-user'
             };
             
-            // Only update user state if there's an actual change
-            if (isUserChanged(user, authUser)) {
-              setUser(authUser);
-            }
+            // Set user state directly for auth state changes
+            setUser(authUser);
+            // Log user sign-in (only once)
+            logNavigationOnce(authUser.email, 'User Signed In');
             setIsLoading(false);
             setAuthError(null);
             return; // Exit early, don't process session
@@ -489,31 +444,31 @@ export const AuthProvider = ({ children }) => {
               id: session.user.id
             };
             
-            // Only update user state if there's an actual change
-            if (isUserChanged(user, authUser)) {
-              setUser(authUser);
-              // Clear email sent state when user is successfully authenticated
-              setIsEmailSent(false);
-            }
+            // Set user state directly for auth state changes
+            setUser(authUser);
+            // Log user sign-in (only once)
+            logNavigationOnce(authUser.email, 'User Signed In');
+            // Clear email sent state when user is successfully authenticated
+            setIsEmailSent(false);
           } else {
             // User is authenticated but not authorized - log them out
             await supabase.auth.signOut();
             setUser(null);
           }
-        } else {
-          // No session and no URL override - clear any existing override data
-          if (!overrideEmail) {
-            clearOverrideUserRole();
-          }
-          
-          // Only update user state if there's an actual change
-          if (user !== null) {
-            setUser(null);
-          }
+        } else if (!overrideEmail) {
+          // No session and no URL override - this shouldn't happen for SIGNED_IN or TOKEN_REFRESHED
+          // Only clear override data, don't clear user state (let SIGNED_OUT event handle that)
+          clearOverrideUserRole();
         }
-        
+
         setIsLoading(false);
         setAuthError(null);
+        } catch (error) {
+          console.error('Error in auth state change handler:', error);
+          setAuthError(error.message);
+        } finally {
+          isProcessingAuthChange.current = false;
+        }
       }
     );
 
@@ -521,8 +476,14 @@ export const AuthProvider = ({ children }) => {
       subscription.unsubscribe();
       // Remove event listener on cleanup
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      // Reset processing flag
+      isProcessingAuthChange.current = false;
+      // Reset last logged user
+      lastLoggedUser.current = null;
+      // Reset initialization flag
+      hasInitialized.current = false;
     };
-  }, [updateSession, user]);
+      }, [logNavigationOnce]); // Include logNavigationOnce in dependencies
 
   // OTP login
   const login = async (email, rememberMe = false) => {
@@ -545,6 +506,8 @@ export const AuthProvider = ({ children }) => {
           id: 'session-user'
         };
         setUser(authUser);
+        // Log user sign-in (only once)
+        logNavigationOnce(authUser.email, 'User Signed In');
         setIsEmailSent(false);
         setIsLoading(false);
         return { success: true, fromSession: true };
@@ -626,6 +589,8 @@ export const AuthProvider = ({ children }) => {
       clearSessionUserRole();
       // Clear override user role on logout
       clearOverrideUserRole();
+      // Reset last logged user
+      lastLoggedUser.current = null;
       
       return { success: true };
     } catch (error) {
