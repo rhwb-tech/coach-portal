@@ -323,6 +323,9 @@ const SmallCouncil = ({ coachEmail, currentSeason }) => {
         if (transferRequest.new_race_distance === 'Lite') {
           // Lite uses coach assignment, and clears race_distance/level
           updateData = { ...baseUpdateData, coach: 'Lite', race_distance: null, level: null };
+        } else if (transferRequest.new_segment === 'Lite') {
+          // Lite segment: set coach to self-coached
+          updateData = { ...baseUpdateData, coach: 'Z. Self', race_distance: transferRequest.new_race_distance };
         } else {
           // For race distances (5K, 10K, Half Marathon, Full Marathon)
           updateData = { ...baseUpdateData, race_distance: transferRequest.new_race_distance };
