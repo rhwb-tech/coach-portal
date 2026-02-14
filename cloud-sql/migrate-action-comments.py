@@ -3,6 +3,7 @@ One-time migration: Export action request comments from Supabase → Cloud SQL.
 
 Source: rhwb_action_requests.comments (where comments IS NOT NULL)
 Maps runner_email_id and requestor_email_id → runner_ids via runners_profile.
+Falls back to rhwb_coaches.fs_email_id → runners_profile for unmapped requestors.
 Upserts into Cloud SQL action_comments table.
 
 Prerequisites:
@@ -75,6 +76,14 @@ def fetch_runner_id_map(sb):
     return mapping
 
 
+def fetch_coach_fs_email_map(sb):
+    """Build email_id → fs_email_id lookup from rhwb_coaches for fallback requestor mapping."""
+    rows = fetch_all_paginated(sb, "rhwb_coaches", "email_id, fs_email_id")
+    mapping = {r["email_id"]: r["fs_email_id"] for r in rows if r.get("fs_email_id")}
+    print(f"  Loaded {len(mapping)} fs_email_id mappings from rhwb_coaches")
+    return mapping
+
+
 def fetch_action_requests_with_comments(sb):
     """Fetch all action requests that have non-null comments."""
     rows = fetch_all_paginated(
@@ -137,9 +146,11 @@ def main():
     print("1. Connecting to Supabase...")
     sb = get_supabase_client()
 
-    # 2. Build runner_id map
+    # 2. Build runner_id map and coach fs_email fallback map
     print("2. Loading runner_id mappings...")
     runner_map = fetch_runner_id_map(sb)
+    print("   Loading coach fs_email_id fallback mappings...")
+    coach_fs_map = fetch_coach_fs_email_map(sb)
 
     # 3. Fetch action requests with comments
     print("3. Fetching action requests with comments...")
@@ -157,6 +168,13 @@ def main():
 
         runner_id = runner_map.get(runner_email)
         requestor_id = runner_map.get(requestor_email)
+
+        # Fallback: if requestor not in runners_profile, look up their
+        # fs_email_id from rhwb_coaches and resolve that instead.
+        if not requestor_id:
+            fs_email = coach_fs_map.get(requestor_email)
+            if fs_email:
+                requestor_id = runner_map.get(fs_email)
 
         if not runner_id:
             unmapped_runners.add(runner_email)
