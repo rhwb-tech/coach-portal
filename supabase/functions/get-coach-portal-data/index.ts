@@ -279,6 +279,78 @@ serve(async (req) => {
       return jsonResponse({ success: true })
     }
 
+    // === Operation: get-comment-categories ===
+    if (operation === 'get-comment-categories') {
+      const { season, season_no, meso, coach_email } = body
+
+      if (!season || season_no === undefined || season_no === null) {
+        return jsonResponse({ error: 'season and season_no are required' }, 400)
+      }
+
+      const effectiveCoachEmail = (role === 'admin' && coach_email) ? coach_email : userEmail
+
+      const { data: coachInputData } = await supabase
+        .from('rhwb_coach_input')
+        .select('email_id')
+        .eq('coach_email', effectiveCoachEmail)
+        .eq('season', season)
+
+      const runnerEmails = [...new Set((coachInputData || []).map((r: { email_id: string }) => r.email_id))]
+      if (runnerEmails.length === 0) {
+        return jsonResponse({ data: [] })
+      }
+
+      const emailToRunnerId = await mapEmailsToRunnerIds(runnerEmails)
+      const runnerIds = Object.values(emailToRunnerId)
+      if (runnerIds.length === 0) {
+        return jsonResponse({ data: [] })
+      }
+
+      const result = await callCloudRun('/get-activity-comment-categories', {
+        runner_ids: runnerIds,
+        season_no,
+        ...(meso ? { meso } : {}),
+      })
+
+      return jsonResponse({ data: result?.data || [] })
+    }
+
+    // === Operation: get-feedback-metrics ===
+    if (operation === 'get-feedback-metrics') {
+      const { season, season_no, meso, coach_email } = body
+
+      if (!season || season_no === undefined || season_no === null) {
+        return jsonResponse({ error: 'season and season_no are required' }, 400)
+      }
+
+      const effectiveCoachEmail = (role === 'admin' && coach_email) ? coach_email : userEmail
+
+      const { data: coachInputData } = await supabase
+        .from('rhwb_coach_input')
+        .select('email_id')
+        .eq('coach_email', effectiveCoachEmail)
+        .eq('season', season)
+
+      const runnerEmails = [...new Set((coachInputData || []).map((r: { email_id: string }) => r.email_id))]
+      if (runnerEmails.length === 0) {
+        return jsonResponse({ data: { runs_with_comments: 0 } })
+      }
+
+      const emailToRunnerId = await mapEmailsToRunnerIds(runnerEmails)
+      const runnerIds = Object.values(emailToRunnerId)
+      if (runnerIds.length === 0) {
+        return jsonResponse({ data: { runs_with_comments: 0 } })
+      }
+
+      const result = await callCloudRun('/get-feedback-metrics', {
+        runner_ids: runnerIds,
+        season_no,
+        ...(meso ? { meso } : {}),
+      })
+
+      return jsonResponse({ data: result?.data || { runs_with_comments: 0 } })
+    }
+
     return jsonResponse({ error: `Unknown operation: ${operation}` }, 400)
 
   } catch (error) {

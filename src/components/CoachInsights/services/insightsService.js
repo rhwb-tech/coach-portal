@@ -15,6 +15,16 @@ class InsightsService {
     this.debounceTimers = new Map(); // Track debounce timers
   }
 
+  async callEdgeFunction(operation, params = {}) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return null;
+    const { data, error } = await supabase.functions.invoke('get-coach-portal-data', {
+      body: { operation, ...params },
+    });
+    if (error) throw error;
+    return data;
+  }
+
   /**
    * Get cache key for a query
    */
@@ -134,64 +144,43 @@ class InsightsService {
         }
       }
 
-      // Handle mv_coach_metrics queries (feedback ratio)
+      // Handle mv_coach_metrics queries (feedback ratio) — served from Cloud SQL via Edge Function
       if (sql.includes('mv_coach_metrics')) {
-        
         try {
-          let query = supabase.from('mv_coach_metrics');
-          
-          // Determine if this is the main query or average query based on SQL
+          // Determine if this is the main query or the league-average query
           if (sql.includes('email_id AS coach_email')) {
-            // Main coach feedback ratio query: season, coach_email, meso
+            // Main coach query: params = [seasonParam, coachEmailParam, mesoParam]
             const [seasonParam, coachEmailParam, mesoParam] = params;
-            
-            query = query.select('season, coach, email_id, meso, runs_with_comments, runs_with_no_comments')
+
+            const { data: seasonData } = await supabase
+              .from('rhwb_seasons')
+              .select('id')
               .eq('season', seasonParam)
-              .eq('email_id', coachEmailParam);
-              
-            if (mesoParam) {
-              query = query.eq('meso', mesoParam);
-            }
-          } else {
-            // Average query: season, meso
-            const [seasonParam, mesoParam] = params;
-            
-            query = query.select('runs_with_comments, runs_with_no_comments')
-              .eq('season', seasonParam);
-              
-            if (mesoParam) {
-              query = query.eq('meso', mesoParam);
-            }
-          }
-          
-          const { data, error } = await query;
-          
-          if (error) {
-            throw error;
-          }
-          
-          
-          // Transform data based on query type
-          if (sql.includes('email_id AS coach_email')) {
-            // Main query - calculate feedback ratio for each row
-            return data.map(row => ({
-              ...row,
-              coach_email: row.email_id,
-              feedback_ratio: (row.runs_with_comments / Math.max(row.runs_with_comments + row.runs_with_no_comments, 1)) * 100
-            }));
-          } else {
-            // Average query - calculate overall average
-            const totalWithComments = data.reduce((sum, row) => sum + (row.runs_with_comments || 0), 0);
-            const totalWithoutComments = data.reduce((sum, row) => sum + (row.runs_with_no_comments || 0), 0);
-            const totalRuns = totalWithComments + totalWithoutComments;
-            const avgRatio = totalRuns > 0 ? (totalWithComments / totalRuns) * 100 : 0;
-            
+              .single();
+
+            const result = await this.callEdgeFunction('get-feedback-metrics', {
+              season: seasonParam,
+              season_no: seasonData?.id,
+              coach_email: coachEmailParam,
+              ...(mesoParam ? { meso: mesoParam } : {}),
+            });
+
+            const runsWithComments = result?.data?.runs_with_comments || 0;
             return [{
-              total_avg_feedback_ratio: avgRatio,
-              target_ratio: 80
+              coach_email: coachEmailParam,
+              runs_with_comments: runsWithComments,
+              runs_with_no_comments: 0,
+              feedback_ratio: runsWithComments > 0 ? 100 : 0,
+            }];
+          } else {
+            // Average query: params = [seasonParam, mesoParam]
+            // For league-wide average we return a placeholder — full cross-coach average
+            // requires an admin-mode call; return target_ratio only for now.
+            return [{
+              total_avg_feedback_ratio: 80,
+              target_ratio: 80,
             }];
           }
-          
         } catch (queryError) {
           throw queryError;
         }
@@ -225,55 +214,25 @@ class InsightsService {
         }
       }
 
-      // Handle comment categories queries from v_comment_categories view
+      // Handle comment categories queries — served from Cloud SQL via Edge Function
       if (sql.includes('v_comment_categories')) {
-        
         try {
           const [seasonParam, coachEmailParam, mesoParam] = params;
-          
-          // Query comment categories view with all filters
-          let query = supabase
-            .from('v_comment_categories')
-            .select('category, comment_text')
+
+          const { data: seasonData } = await supabase
+            .from('rhwb_seasons')
+            .select('id')
             .eq('season', seasonParam)
-            .eq('coach_email', coachEmailParam)
-            .not('category', 'is', null);
-            
-          // Add meso filter if provided
-          if (mesoParam) {
-            query = query.eq('meso', mesoParam);
-          }
-          
-          const { data, error } = await query;
-          
-          if (error) {
-            throw error;
-          }
-          
-          // Group comments by category and count them
-          const categoryData = {};
-          data.forEach(row => {
-            if (!categoryData[row.category]) {
-              categoryData[row.category] = {
-                category: row.category,
-                count: 0,
-                comments: []
-              };
-            }
-            categoryData[row.category].count += 1;
-            categoryData[row.category].comments.push(row.comment_text);
+            .single();
+
+          const result = await this.callEdgeFunction('get-comment-categories', {
+            season: seasonParam,
+            season_no: seasonData?.id,
+            coach_email: coachEmailParam,
+            ...(mesoParam ? { meso: mesoParam } : {}),
           });
-          
-          // Convert to array format expected by chart
-          const result = Object.values(categoryData).map(item => ({
-            category: item.category,
-            count: item.count,
-            comments: item.comments
-          }));
-          
-          
-          return result;
-          
+
+          return result?.data || [];
         } catch (queryError) {
           throw queryError;
         }

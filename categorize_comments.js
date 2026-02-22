@@ -2,10 +2,10 @@
 
 /**
  * RHWB Comments Categorization Script
- * 
- * This script applies the categorization logic from comments_categorization.py
- * to comments in the rhwb_activities_comments table.
- * 
+ *
+ * Reads uncategorized coach comments from Cloud SQL (via Cloud Run),
+ * applies categorization logic, and writes categories back to Cloud SQL.
+ *
  * Categories:
  * 1. Acknowledgement - One or two word comments
  * 2. Technical Feedback - Contains running technique terms
@@ -20,15 +20,36 @@ const readline = require('readline');
 // Load environment variables
 require('dotenv').config();
 
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
-const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
+const cloudRunUrl = process.env.CLOUD_RUN_URL;
+const cloudRunApiKey = process.env.CLOUD_RUN_API_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('❌ Missing Supabase environment variables. Please check your .env file.');
+if (!cloudRunUrl || !cloudRunApiKey) {
+  console.error('❌ Missing Cloud Run environment variables (CLOUD_RUN_URL, CLOUD_RUN_API_KEY). Please check your .env file.');
   process.exit(1);
 }
 
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Supabase client is still needed to fetch coach list
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
+const supabase = (supabaseUrl && supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null;
+
+async function callCloudRun(endpoint, body) {
+  const resp = await fetch(`${cloudRunUrl}${endpoint}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': cloudRunApiKey,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Cloud Run ${endpoint} error ${resp.status}: ${text}`);
+  }
+  return resp.json();
+}
 
 /**
  * Categorize a comment based on the Python logic from comments_categorization.py
@@ -90,68 +111,37 @@ function categorizeComment(comment) {
 }
 
 /**
- * Extract comments from database using the provided SQL query
- * @returns {Array} Array of comment objects with workout_key and comment_text
+ * Fetch coach email list from Supabase rhwb_coaches.
+ * @returns {string[]} Array of coach email addresses
+ */
+async function fetchCoachEmails() {
+  if (!supabase) {
+    throw new Error('Supabase client not configured — set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY');
+  }
+  const { data, error } = await supabase.from('rhwb_coaches').select('email_id');
+  if (error) throw error;
+  return (data || []).map(c => c.email_id).filter(Boolean);
+}
+
+/**
+ * Extract uncategorized coach comments from Cloud SQL via Cloud Run.
+ * @returns {Array} Array of comment objects with workout_key, comment_text, comment_user
  */
 async function extractComments() {
-  console.log('📊 Extracting coach comments from database...');
-  
+  console.log('📊 Fetching coach email list from Supabase...');
+  const coachEmails = await fetchCoachEmails();
+  console.log(`  Found ${coachEmails.length} coach email(s)`);
+
+  console.log('📊 Extracting uncategorized coach comments from Cloud SQL...');
   try {
-    // Use the exact SQL query specified: 
-    // SELECT workout_key, comment_text 
-    // FROM rhwb_activities_comments a 
-    // INNER JOIN rhwb_coaches b ON a.comment_user = b.email_id
-    
-    const { data, error } = await supabase.rpc('get_coach_comments');
-
-    if (error) {
-      console.log('❌ RPC function not found, trying direct query approach...');
-      
-      // Try a different approach - get all comments and filter manually
-      const { data: commentsData, error: commentsError } = await supabase
-        .from('rhwb_activities_comments')
-        .select('workout_key, comment_text, comment_user');
-
-      if (commentsError) {
-        console.error('❌ Comments query error:', commentsError);
-        throw commentsError;
-      }
-
-      const { data: coachesData, error: coachesError } = await supabase
-        .from('rhwb_coaches')
-        .select('email_id');
-
-      if (coachesError) {
-        console.error('❌ Coaches query error:', coachesError);
-        throw coachesError;
-      }
-
-      // Create a set of coach email IDs for faster lookup
-      const coachEmails = new Set(coachesData.map(coach => coach.email_id));
-
-      // Filter comments to only include those from coaches
-      const validComments = commentsData.filter(comment => 
-        comment.comment_text && 
-        comment.comment_text.trim() &&
-        coachEmails.has(comment.comment_user)
-      );
-
-      console.log(`✅ Successfully extracted ${validComments.length} coach comments from database`);
-      return validComments.map(item => ({
-        workout_key: item.workout_key,
-        comment_text: item.comment_text.trim(),
-        comment_user: item.comment_user
-      }));
-    }
-
-    // If RPC function exists and works
-    console.log(`✅ Successfully extracted ${data.length} coach comments from database`);
-    return data.map(item => ({
+    const result = await callCloudRun('/get-uncategorized-comments', { coach_emails: coachEmails });
+    const rows = result.data || [];
+    console.log(`✅ Successfully extracted ${rows.length} uncategorized coach comments`);
+    return rows.map(item => ({
       workout_key: item.workout_key,
-      comment_text: item.comment_text.trim(),
-      comment_user: item.comment_user
+      comment_text: (item.comment_text || '').trim(),
+      comment_user: item.comment_user,
     }));
-
   } catch (error) {
     console.error('❌ Error extracting comments:', error.message);
     throw error;
@@ -262,169 +252,35 @@ function getUserConfirmation() {
 }
 
 /**
- * Create backup of the rhwb_activities_comments table
- * @returns {Promise<void>}
- */
-async function createBackup() {
-  console.log('\n💾 Creating backup of rhwb_activities_comments table...');
-  
-  try {
-    // First, check if a category column already exists
-    const { data: columnCheck, error: columnError } = await supabase.rpc('check_column_exists', {
-      table_name: 'rhwb_activities_comments',
-      column_name: 'category'
-    });
-
-    if (columnError) {
-      console.log('❌ Column check RPC not found, using direct approach...');
-    }
-
-    // Get current timestamp for backup table name
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const backupTableName = `rhwb_activities_comments_backup_${timestamp}`;
-
-    // Create backup table with all data
-    const { error: backupError } = await supabase.rpc('create_backup_table', {
-      original_table: 'rhwb_activities_comments',
-      backup_table: backupTableName
-    });
-
-    if (backupError) {
-      console.log('❌ Backup RPC not found, using alternative backup approach...');
-      
-      // Alternative: Export current data to a local backup file
-      const { data: backupData, error: exportError } = await supabase
-        .from('rhwb_activities_comments')
-        .select('*');
-
-      if (exportError) {
-        console.error('❌ Failed to export data for backup:', exportError);
-        throw exportError;
-      }
-
-      // Save backup data to a local file
-      const fs = require('fs');
-      const backupFilename = `backup_rhwb_activities_comments_${timestamp}.json`;
-      
-      fs.writeFileSync(backupFilename, JSON.stringify(backupData, null, 2));
-      console.log(`✅ Backup created: ${backupFilename} (${backupData.length} records)`);
-      
-      return { backupFile: backupFilename, recordCount: backupData.length };
-    } else {
-      console.log(`✅ Database backup table created: ${backupTableName}`);
-      return { backupTable: backupTableName };
-    }
-
-  } catch (error) {
-    console.error('❌ Error creating backup:', error.message);
-    throw error;
-  }
-}
-
-/**
- * Add category column to rhwb_activities_comments table if it doesn't exist
- * @returns {Promise<void>}
- */
-async function ensureCategoryColumn() {
-  console.log('\n🔧 Ensuring category column exists in rhwb_activities_comments table...');
-  
-  try {
-    // Try adding the category column (will fail gracefully if it already exists)
-    const { error } = await supabase.rpc('add_category_column');
-
-    if (error) {
-      console.log('❌ Add column RPC not found, using direct approach...');
-      
-      // Alternative approach: Try to query the column to see if it exists
-      const { data, error: testError } = await supabase
-        .from('rhwb_activities_comments')
-        .select('category')
-        .limit(1);
-
-      if (testError) {
-        if (testError.message.includes('column "category" does not exist')) {
-          console.log('⚠️  Category column does not exist. Manual database schema update required.');
-          console.log('Please run this SQL command in your Supabase dashboard:');
-          console.log('ALTER TABLE rhwb_activities_comments ADD COLUMN category VARCHAR(50);');
-          throw new Error('Category column missing - manual database update required');
-        } else {
-          console.error('❌ Error checking category column:', testError);
-          throw testError;
-        }
-      } else {
-        console.log('✅ Category column already exists');
-      }
-    } else {
-      console.log('✅ Category column added successfully');
-    }
-
-  } catch (error) {
-    console.error('❌ Error ensuring category column:', error.message);
-    throw error;
-  }
-}
-
-/**
- * Update database with categorized results
+ * Update Cloud SQL with categorized results via Cloud Run.
  * @param {Array} categorizedComments - Array of comments with categories
  * @returns {Promise<void>}
  */
 async function updateDatabase(categorizedComments) {
-  console.log('\n🔄 Updating database with categorization results...');
+  console.log('\n🔄 Updating Cloud SQL with categorization results via Cloud Run...');
 
   try {
-    // Note: The original request mentioned updating rhwb_activities table
-    // but based on the query structure, we'll update rhwb_activities_comments
-    // You may need to adjust this based on your actual schema
-    
-    let successCount = 0;
-    let errorCount = 0;
-    
-    // Process in batches to avoid overwhelming the database
-    const batchSize = 50;
-    const batches = [];
-    
+    const batchSize = 100;
+    let totalUpdated = 0;
+
     for (let i = 0; i < categorizedComments.length; i += batchSize) {
-      batches.push(categorizedComments.slice(i, i + batchSize));
-    }
+      const batch = categorizedComments.slice(i, i + batchSize);
+      const updates = batch.map(c => ({
+        workout_key: c.workout_key,
+        comment_user: c.comment_user,
+        category: c.category,
+      }));
 
-    console.log(`Processing ${batches.length} batches of ${batchSize} comments each...`);
-
-    for (let i = 0; i < batches.length; i++) {
-      const batch = batches[i];
-      console.log(`Processing batch ${i + 1}/${batches.length}...`);
-
-      for (const comment of batch) {
-        try {
-          // Update the rhwb_activities_comments table with the category
-          const { error } = await supabase
-            .from('rhwb_activities_comments')
-            .update({ category: comment.category })
-            .eq('workout_key', comment.workout_key)
-            .eq('comment_text', comment.comment_text);
-
-          if (error) {
-            console.error(`❌ Error updating comment ${comment.workout_key}:`, error.message);
-            errorCount++;
-          } else {
-            successCount++;
-          }
-        } catch (error) {
-          console.error(`❌ Exception updating comment ${comment.workout_key}:`, error.message);
-          errorCount++;
-        }
-      }
+      const result = await callCloudRun('/categorize-activity-comments', { updates });
+      totalUpdated += result.updated || 0;
+      console.log(`  Processed batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(categorizedComments.length / batchSize)} (${totalUpdated} updated so far)`);
     }
 
     console.log('\n✅ DATABASE UPDATE COMPLETE');
-    console.log('=' .repeat(50));
-    console.log(`Successfully updated: ${successCount} comments`);
-    if (errorCount > 0) {
-      console.log(`Failed to update: ${errorCount} comments`);
-    }
+    console.log('='.repeat(50));
+    console.log(`Successfully updated: ${totalUpdated} comments`);
 
-    return { successCount, errorCount };
-
+    return { successCount: totalUpdated, errorCount: 0 };
   } catch (error) {
     console.error('❌ Error during database update:', error.message);
     throw error;
@@ -432,48 +288,26 @@ async function updateDatabase(categorizedComments) {
 }
 
 /**
- * Verify categorization results by querying the updated database
+ * Verify categorization by checking how many comments remain uncategorized.
+ * @param {string[]} coachEmails
  * @returns {Promise<void>}
  */
-async function verifyCategorizationResults() {
+async function verifyCategorizationResults(coachEmails) {
   console.log('\n🔍 Verifying categorization results...');
-  
+
   try {
-    // Get category distribution from the updated database
-    const { data: categoryData, error } = await supabase
-      .from('rhwb_activities_comments')
-      .select('category')
-      .not('category', 'is', null);
-
-    if (error) {
-      console.error('❌ Error verifying results:', error);
-      return;
-    }
-
-    // Calculate final category distribution
-    const finalCategoryStats = {};
-    categoryData.forEach(item => {
-      finalCategoryStats[item.category] = (finalCategoryStats[item.category] || 0) + 1;
-    });
-
-    const totalCategorized = categoryData.length;
+    const result = await callCloudRun('/get-uncategorized-comments', { coach_emails: coachEmails });
+    const remaining = (result.data || []).length;
 
     console.log('\n📊 FINAL CATEGORIZATION VERIFICATION');
-    console.log('=' .repeat(50));
-    console.log(`Total Comments Categorized: ${totalCategorized}`);
-    console.log('\nFinal Category Distribution:');
+    console.log('='.repeat(50));
+    console.log(`Remaining uncategorized coach comments: ${remaining}`);
 
-    // Sort categories by count (descending)
-    const sortedFinalCategories = Object.entries(finalCategoryStats)
-      .sort(([,a], [,b]) => b - a);
-
-    sortedFinalCategories.forEach(([category, count]) => {
-      const percentage = ((count / totalCategorized) * 100).toFixed(2);
-      console.log(`  ✅ ${category}: ${count} (${percentage}%)`);
-    });
-
-    console.log('\n✅ Categorization verification completed successfully!');
-
+    if (remaining === 0) {
+      console.log('\n✅ All coach comments have been categorized!');
+    } else {
+      console.log(`\n⚠️  ${remaining} comment(s) could not be categorized — review manually.`);
+    }
   } catch (error) {
     console.error('❌ Error during verification:', error.message);
   }
@@ -485,51 +319,35 @@ async function verifyCategorizationResults() {
 async function main() {
   try {
     console.log('🚀 RHWB Comments Categorization Tool');
-    console.log('=' .repeat(50));
+    console.log('='.repeat(50));
 
-    // Step 1: Create backup of existing data
-    const backupInfo = await createBackup();
-    console.log('✅ Backup created successfully');
-
-    // Step 2: Ensure category column exists
-    await ensureCategoryColumn();
-    console.log('✅ Database schema verified');
-
-    // Step 3: Extract comments from database
+    // Step 1: Extract uncategorized comments from Cloud SQL
     const comments = await extractComments();
 
     if (comments.length === 0) {
-      console.log('ℹ️  No comments found to categorize.');
+      console.log('ℹ️  No uncategorized comments found.');
       return;
     }
 
-    // Step 4: Categorize all comments
+    // Step 2: Categorize all comments
     const analysis = categorizeAllComments(comments);
 
-    // Step 5: Display sample comments by category
+    // Step 3: Display sample comments by category
     displaySampleComments(analysis);
 
-    // Step 6: Update database (batch processing automatically applied)
+    // Step 4: Update Cloud SQL with categories
     console.log('\n⚠️  PROCEEDING WITH DATABASE UPDATE (User has pre-approved)');
-    console.log('Backup Information:', backupInfo);
-    
     await updateDatabase(analysis.categorizedComments);
 
-    // Step 7: Final verification
-    await verifyCategorizationResults();
+    // Step 5: Final verification
+    const coachEmails = await fetchCoachEmails();
+    await verifyCategorizationResults(coachEmails);
 
     console.log('\n🎉 Comments categorization completed successfully!');
 
   } catch (error) {
     console.error('\n❌ CATEGORIZATION FAILED');
     console.error('Error:', error.message);
-    
-    if (error.message.includes('Category column missing')) {
-      console.log('\n📝 MANUAL ACTION REQUIRED:');
-      console.log('1. Add the category column to your database');
-      console.log('2. Re-run this script');
-    }
-    
     process.exit(1);
   }
 }
