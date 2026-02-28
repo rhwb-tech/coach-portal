@@ -144,43 +144,65 @@ class InsightsService {
         }
       }
 
-      // Handle mv_coach_metrics queries (feedback ratio) — served from Cloud SQL via Edge Function
+      // Handle mv_coach_metrics queries (feedback ratio) — direct query to view
       if (sql.includes('mv_coach_metrics')) {
         try {
-          // Determine if this is the main query or the league-average query
+          // Main coach query: params = [seasonParam, coachEmailParam, mesoParam]
           if (sql.includes('email_id AS coach_email')) {
-            // Main coach query: params = [seasonParam, coachEmailParam, mesoParam]
             const [seasonParam, coachEmailParam, mesoParam] = params;
-
-            const { data: seasonData } = await supabase
-              .from('rhwb_seasons')
-              .select('id')
+            let query = supabase
+              .from('mv_coach_metrics')
+              .select('runs_with_comments, runs_with_no_comments')
               .eq('season', seasonParam)
-              .single();
-
-            const result = await this.callEdgeFunction('get-feedback-metrics', {
-              season: seasonParam,
-              season_no: seasonData?.id,
-              coach_email: coachEmailParam,
-              ...(mesoParam ? { meso: mesoParam } : {}),
-            });
-
-            const runsWithComments = result?.data?.runs_with_comments || 0;
+              .eq('email_id', coachEmailParam);
+            if (mesoParam) {
+              query = query.eq('meso', mesoParam);
+            }
+            const { data: rows, error } = await query.maybeSingle();
+            if (error) throw error;
+            if (!rows) {
+              return [{
+                coach_email: coachEmailParam,
+                runs_with_comments: 0,
+                runs_with_no_comments: 0,
+                feedback_ratio: 0,
+              }];
+            }
+            const runsWithComments = Number(rows.runs_with_comments) || 0;
+            const runsWithNoComments = Number(rows.runs_with_no_comments) || 0;
+            const total = runsWithComments + runsWithNoComments;
+            const feedback_ratio = total > 0 ? (runsWithComments / total) * 100 : 0;
             return [{
               coach_email: coachEmailParam,
               runs_with_comments: runsWithComments,
-              runs_with_no_comments: 0,
-              feedback_ratio: runsWithComments > 0 ? 100 : 0,
-            }];
-          } else {
-            // Average query: params = [seasonParam, mesoParam]
-            // For league-wide average we return a placeholder — full cross-coach average
-            // requires an admin-mode call; return target_ratio only for now.
-            return [{
-              total_avg_feedback_ratio: 80,
-              target_ratio: 80,
+              runs_with_no_comments: runsWithNoComments,
+              feedback_ratio,
             }];
           }
+          // Average query: params = [seasonParam, mesoParam]
+          const [seasonParam, mesoParam] = params;
+          let avgQuery = supabase
+            .from('mv_coach_metrics')
+            .select('runs_with_comments, runs_with_no_comments')
+            .eq('season', seasonParam);
+          if (mesoParam) {
+            avgQuery = avgQuery.eq('meso', mesoParam);
+          }
+          const { data: avgRows, error: avgError } = await avgQuery;
+          if (avgError) throw avgError;
+          if (!avgRows?.length) {
+            return [{ total_avg_feedback_ratio: 80, target_ratio: 80 }];
+          }
+          const ratios = avgRows
+            .map((r) => {
+              const c = Number(r.runs_with_comments) || 0;
+              const n = Number(r.runs_with_no_comments) || 0;
+              const t = c + n;
+              return t > 0 ? (c / t) * 100 : 0;
+            })
+            .filter((x) => Number.isFinite(x));
+          const total_avg_feedback_ratio = ratios.length ? ratios.reduce((a, b) => a + b, 0) / ratios.length : 80;
+          return [{ total_avg_feedback_ratio, target_ratio: 80 }];
         } catch (queryError) {
           throw queryError;
         }
@@ -188,27 +210,52 @@ class InsightsService {
 
       // Handle coach_rlb queries (runners left behind)
       if (sql.includes('coach_rlb')) {
-        
         try {
           const [seasonParam, coachEmailParam, mesoParam] = params;
-          
-          let query = supabase.from('coach_rlb')
+          // coach_rlb.season is stored as "Season 13", "Season 14" etc.; app may pass id (14) or name ("Season 14")
+          let season = seasonParam != null ? String(seasonParam).trim() : seasonParam;
+          if (season && !season.toLowerCase().startsWith('season')) {
+            const num = parseInt(season, 10);
+            if (!Number.isNaN(num)) season = `Season ${num}`;
+          }
+          const meso = mesoParam != null && mesoParam !== '' ? String(mesoParam) : null;
+          const coachVal = coachEmailParam != null ? String(coachEmailParam).trim() : coachEmailParam;
+          if (coachVal == null || coachVal === '') return [];
+
+          // Match coach by either coach_email or email_id; quote value so @ and . in emails don't break PostgREST .or()
+          const escaped = coachVal.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+          const orFilter = `coach_email.ilike."${escaped}",email_id.ilike."${escaped}"`;
+          let q = supabase.from('coach_rlb')
             .select('runner_name')
-            .eq('season', seasonParam)
-            .eq('coach_email', coachEmailParam);
-            
-          if (mesoParam) {
-            query = query.eq('meso', mesoParam);
+            .eq('season', season)
+            .or(orFilter);
+          if (meso != null) {
+            q = q.eq('meso', meso);
           }
-          
-          const { data, error } = await query;
-          
+          let { data, error } = await q;
+          // If .or() fails (e.g. syntax), fallback to coach_email only
           if (error) {
-            throw error;
+            let fb = supabase.from('coach_rlb')
+              .select('runner_name')
+              .eq('season', season)
+              .ilike('coach_email', coachVal);
+            if (meso != null) fb = fb.eq('meso', meso);
+            const res = await fb;
+            if (!res.error) {
+              data = res.data;
+              error = null;
+            }
           }
-          
-          return data || [];
-          
+          if (error) throw error;
+          // Dedupe by runner_name in case both columns matched
+          const seen = new Set();
+          const out = (data || []).filter((r) => {
+            const key = r.runner_name;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+          return out;
         } catch (queryError) {
           throw queryError;
         }
@@ -578,42 +625,29 @@ class InsightsService {
         throw new Error(`Chart config not found for ID: ${chartId}`);
       }
 
+      // When admin selects a coach in the dropdown, use that coach for all per-coach charts
+      const coachForQuery = (selectedCoach && availableCoaches.length > 0) ? selectedCoach : coachEmail;
+
       // For queries that need Season format, detect and handle appropriately
       let params;
       if (config.sql.includes('cumulative_score') && config.sql.includes('rhwb_meso_scores')) {
         // Use seasonNumber as-is since it comes from the database already formatted
         let seasonName = seasonNumber;
-        
-        // Use coach email ID directly since SQL expects b.email_id = $2
-        let coachEmailId = coachEmail; // default to current coach email
-        if (selectedCoach && availableCoaches.length > 0) {
-          // selectedCoach is the coach_email_id from the dropdown
-          coachEmailId = selectedCoach;
-        }
-        
         // Include meso parameter for athleteCompletion chart
-        params = [seasonName, coachEmailId, selectedMeso];
+        params = [seasonName, coachForQuery, selectedMeso];
         
       } else if (config.id === 'mesocycleProgress') {
         // Use seasonNumber as-is since it comes from the database already formatted
         let seasonName = seasonNumber;
         params = [coachEmail, seasonName];
       } else if (config.id === 'feedbackRatio') {
-        // Feedback ratio needs season number, coach email, and meso
-        let seasonName = seasonNumber || seasonId;
-        params = [seasonName, coachEmail, selectedMeso];
+        params = [seasonNumber || seasonId, coachForQuery, selectedMeso];
       } else if (config.id === 'runnersLeftBehind') {
-        // Runners left behind needs season number, coach email, and meso
-        let seasonName = seasonNumber || seasonId;
-        params = [seasonName, coachEmail, selectedMeso];
+        params = [seasonNumber || seasonId, coachForQuery, selectedMeso];
       } else if (config.id === 'commentCategories') {
-        // Comment categories needs season, coach email, and meso
-        let seasonName = seasonNumber || seasonId;
-        params = [seasonName, coachEmail, selectedMeso];
+        params = [seasonNumber || seasonId, coachForQuery, selectedMeso];
       } else if (config.id === 'pulseInteractions') {
-        // Pulse interactions needs season and coach email
-        let seasonName = seasonNumber || seasonId;
-        params = [seasonName, coachEmail];
+        params = [seasonNumber || seasonId, coachForQuery];
       } else {
         // Legacy format for other queries  
         params = [coachEmail, seasonId];

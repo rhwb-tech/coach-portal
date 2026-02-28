@@ -281,33 +281,16 @@ serve(async (req) => {
 
     // === Operation: get-comment-categories ===
     if (operation === 'get-comment-categories') {
-      const { season, season_no, meso, coach_email } = body
+      const { season_no, meso, coach_email } = body
 
-      if (!season || season_no === undefined || season_no === null) {
-        return jsonResponse({ error: 'season and season_no are required' }, 400)
+      if (season_no === undefined || season_no === null) {
+        return jsonResponse({ error: 'season_no is required' }, 400)
       }
 
       const effectiveCoachEmail = (role === 'admin' && coach_email) ? coach_email : userEmail
 
-      const { data: coachInputData } = await supabase
-        .from('rhwb_coach_input')
-        .select('email_id')
-        .eq('coach_email', effectiveCoachEmail)
-        .eq('season', season)
-
-      const runnerEmails = [...new Set((coachInputData || []).map((r: { email_id: string }) => r.email_id))]
-      if (runnerEmails.length === 0) {
-        return jsonResponse({ data: [] })
-      }
-
-      const emailToRunnerId = await mapEmailsToRunnerIds(runnerEmails)
-      const runnerIds = Object.values(emailToRunnerId)
-      if (runnerIds.length === 0) {
-        return jsonResponse({ data: [] })
-      }
-
       const result = await callCloudRun('/get-activity-comment-categories', {
-        runner_ids: runnerIds,
+        coach_email: effectiveCoachEmail,
         season_no,
         ...(meso ? { meso } : {}),
       })

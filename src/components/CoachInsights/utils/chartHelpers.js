@@ -72,12 +72,19 @@ export const getResponsiveAspectRatio = (config, screenWidth) => {
 // Transform SQL results to chart data format
 export const transformDataForChart = (rawData, config, avgData = null) => {
   try {
-    if (!rawData || !Array.isArray(rawData) || rawData.length === 0) {
+    if (!rawData || !Array.isArray(rawData)) {
       return null;
     }
 
     // Use the config's dataTransform function if available
     if (config.dataTransform && typeof config.dataTransform === 'function') {
+      // Feedback ratio: show 0% when main query is empty; runners left behind: show "Great Job!"
+      if (rawData.length === 0 && (config.id === 'feedbackRatio' || config.id === 'runnersLeftBehind')) {
+        return config.dataTransform(rawData, avgData);
+      }
+      if (rawData.length === 0) {
+        return null;
+      }
       // Pass avgData for charts that need it (like feedback ratio)
       return config.dataTransform(rawData, avgData);
     }

@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 
+const DEFAULT_BULLET_DATA = { coachPercentage: 0, averagePercentage: 0, target: 80 };
+
 const BulletChart = ({ data, height = 300 }) => {
-  const { coachPercentage, averagePercentage, target } = data;
+  const safeData = data && typeof data === 'object' ? data : DEFAULT_BULLET_DATA;
+  const coachPercentage = Number(safeData.coachPercentage) || 0;
+  const averagePercentage = Number(safeData.averagePercentage) || 0;
+  const target = Number(safeData.target) || 80;
   const [showAvgTooltip, setShowAvgTooltip] = useState(false);
   const [showTargetTooltip, setShowTargetTooltip] = useState(false);
 
