@@ -139,13 +139,16 @@ serve(async (req) => {
       }
 
       // Call Cloud Run
+      console.log('[get-qual-scores] calling Cloud Run with', JSON.stringify({ runner_ids: runnerIds, season, meso }))
       const result = await callCloudRun('/get-qual-scores-by-coach', {
         runner_ids: runnerIds,
         season,
         ...(meso ? { meso } : {}),
       })
+      console.log('[get-qual-scores] Cloud Run result', JSON.stringify(result))
 
       if (!result) {
+        console.error('[get-qual-scores] Cloud Run returned null — endpoint may not exist or errored')
         return jsonResponse({ data: [], error: 'Failed to fetch qual scores' })
       }
 
@@ -204,7 +207,7 @@ serve(async (req) => {
     // === Operation: upsert-qual-score ===
     if (operation === 'upsert-qual-score') {
       const { email_id, season, meso, qual_score } = body
-      if (!email_id || !season || !meso || !qual_score) {
+      if (!email_id || !season || !meso || qual_score === undefined || qual_score === null) {
         return jsonResponse({ error: 'email_id, season, meso, and qual_score are required' }, 400)
       }
 

@@ -775,13 +775,15 @@ const CoachDashboard = () => {
         const seasonStr = `Season ${season}`;
         const qualScores = await fetchQualScores(seasonStr, null, coachEmail);
         const qualMap = {};
+        const norm = (email, meso) => `${String(email ?? '').trim().toLowerCase()}_${String(meso ?? '')}`;
         for (const qs of qualScores) {
-          const key = `${qs.email_id}_${qs.meso}`;
-          qualMap[key] = qs.qual_score;
+          if (qs.email_id == null && qs.runner_id != null) continue; // skip if edge didn't map runner_id -> email_id
+          const key = norm(qs.email_id, qs.meso);
+          qualMap[key] = qs.qual_score ?? '';
         }
         const mergedData = data.map(athlete => ({
           ...athlete,
-          meso_qual_score: qualMap[`${athlete.email_id}_${athlete.meso}`] || '',
+          meso_qual_score: qualMap[norm(athlete.email_id, athlete.meso)] ?? athlete.meso_qual_score ?? '',
         }));
 
         setAllAthletes(mergedData);
@@ -956,10 +958,10 @@ const CoachDashboard = () => {
       // Save override score to Supabase
       await updateAthleteData(runnerId, updatedData, selectedMeso);
 
-      // Save qual score to Cloud SQL (if provided)
-      if (updatedData?.qualitativeScore) {
+      // Save qual score to Cloud SQL (always, so coaches can clear a previously saved score)
+      if (updatedData && updatedData.qualitativeScore !== undefined) {
         const seasonStr = `Season ${season}`;
-        await upsertQualScore(runnerId, seasonStr, selectedMeso, updatedData.qualitativeScore);
+        await upsertQualScore(runnerId, seasonStr, selectedMeso, updatedData.qualitativeScore ?? '');
       }
 
       // Update the local state with the new data (only for the specific mesocycle)
@@ -968,7 +970,7 @@ const CoachDashboard = () => {
           ? {
               ...athlete,
               meso_score_override: updatedData.overrideScore || null,
-              meso_qual_score: updatedData.qualitativeScore || athlete.meso_qual_score
+              meso_qual_score: updatedData.qualitativeScore !== undefined ? updatedData.qualitativeScore : athlete.meso_qual_score
             }
           : athlete
       ));

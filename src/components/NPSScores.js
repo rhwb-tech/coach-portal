@@ -117,9 +117,17 @@ export default function NPSScores() {
   const seasons = [...new Set(allData.map(d => d.season))];
   const coaches = [...new Set(allData.map(d => d.coach))];
   const programs = ['Pro', 'Masters', 'Walk'];
-  
+
   const [selectedSeason, setSelectedSeason] = useState(seasons[0] || '');
   const [selectedCoach, setSelectedCoach] = useState('');
+
+  // When real data loads, reset selectedSeason if current selection is no longer valid
+  useEffect(() => {
+    const availableSeasons = [...new Set(allData.map(d => d.season))];
+    if (availableSeasons.length > 0 && !availableSeasons.includes(selectedSeason)) {
+      setSelectedSeason(availableSeasons[0]);
+    }
+  }, [allData]); // eslint-disable-line react-hooks/exhaustive-deps
   const [coachName, setCoachName] = useState('');
   const [legendExpanded, setLegendExpanded] = useState(false);
   const [surveyRate, setSurveyRate] = useState(null);
