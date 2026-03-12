@@ -3,18 +3,16 @@ import { supabase } from './supabaseClient';
 const EDGE_FUNCTION_NAME = 'get-coach-portal-data';
 
 async function callEdgeFunction(operation, params = {}) {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    // No active session (e.g. email override mode) — skip Cloud SQL calls gracefully
-    console.warn(`Cloud SQL (${operation}): skipped — no active auth session`);
-    return null;
-  }
-
   const { data, error } = await supabase.functions.invoke(EDGE_FUNCTION_NAME, {
     body: { operation, ...params },
   });
 
   if (error) {
+    // 401 = no active session (e.g. email override dev mode) — skip gracefully
+    if (error.status === 401 || error.message?.includes('401')) {
+      console.warn(`Cloud SQL (${operation}): skipped — no active auth session`);
+      return null;
+    }
     console.error(`Edge function error (${operation}):`, error);
     throw error;
   }
