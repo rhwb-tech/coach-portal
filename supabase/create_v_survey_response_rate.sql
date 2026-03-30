@@ -2,15 +2,29 @@
 -- Columns: season, coach, runners_count, respondents, response_rate_percent, avg_response_rate_for_season
 --
 -- Sources:
---   Runner counts  → rhwb_coach_input (all seasons)
+--   Runner counts Season 15  → runner_season_info (season = 'Season 15')
+--   Runner counts other seasons → rhwb_coach_input
 --   Respondents 13/14 → rhwbsurvey (coach stored as full name in program-specific columns)
 --   Respondents 15    → nps_survey_responses (coach stored as email)
 
 CREATE OR REPLACE VIEW v_survey_response_rate AS
 WITH
 
--- Total runners assigned per coach per season
-coach_runners AS (
+-- Season 15 runner counts from runner_season_info
+coach_runners_s15 AS (
+  SELECT
+    rsi.season,
+    r.full_name AS coach,
+    r.email_id  AS coach_email,
+    COUNT(DISTINCT rsi.email_id) AS runners_count
+  FROM runner_season_info rsi
+  JOIN v_rhwb_roles r ON LOWER(r.full_name) = LOWER(rsi.coach)
+  WHERE rsi.season = 'Season 15'
+  GROUP BY rsi.season, r.full_name, r.email_id
+),
+
+-- Other seasons: runner counts from rhwb_coach_input
+coach_runners_other AS (
   SELECT
     ci.season,
     r.full_name AS coach,
@@ -18,8 +32,14 @@ coach_runners AS (
     COUNT(DISTINCT ci.email_id) AS runners_count
   FROM rhwb_coach_input ci
   JOIN v_rhwb_roles r ON LOWER(r.email_id) = LOWER(ci.coach_email)
-  WHERE ci.season IS NOT NULL
+  WHERE ci.season IS NOT NULL AND ci.season != 'Season 15'
   GROUP BY ci.season, r.full_name, r.email_id
+),
+
+coach_runners AS (
+  SELECT * FROM coach_runners_s15
+  UNION ALL
+  SELECT * FROM coach_runners_other
 ),
 
 -- Respondents for Seasons 13 & 14: coach name stored in survey row

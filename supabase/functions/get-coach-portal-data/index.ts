@@ -337,6 +337,111 @@ serve(async (req) => {
       return jsonResponse({ data: result?.data || { runs_with_comments: 0 } })
     }
 
+    // === Operation: get-nps-scores ===
+    if (operation === 'get-nps-scores') {
+      let query = supabase.from('v_nps_scores').select('*')
+
+      // Coaches only see their own data; admins see all
+      if (role === 'coach') {
+        query = query.eq('coach', roleData.full_name)
+      }
+
+      const { data: npsData, error: npsError } = await query
+      if (npsError) {
+        console.error('[get-nps-scores] error:', npsError)
+        return jsonResponse({ error: 'Failed to fetch NPS scores' }, 500)
+      }
+
+      // Fetch Season 15 additional data from rhwbsurvey_season15 (wide-format, Cloud SQL)
+      const s15Result = await callCloudRun('/get-rhwbsurvey-s15-nps', {})
+      const s15Extra: any[] = s15Result?.data || []
+
+      let finalData: any[]
+
+      if (s15Extra.length === 0) {
+        finalData = npsData || []
+      } else {
+        // Filter Cloud Run rows by coach if needed
+        const filteredS15Extra = role === 'coach'
+          ? s15Extra.filter((r: any) => r.coach === roleData.full_name)
+          : s15Extra
+
+        // Separate Season 15 New/Return rows from everything else
+        const nonS15 = (npsData || []).filter((r: any) => r.season !== 'Season 15')
+        const s15Supabase = (npsData || []).filter((r: any) => r.season === 'Season 15')
+
+        // Weighted NPS merge: combined_nps = (nps1*t1 + nps2*t2) / (t1+t2)
+        function mergeNpsRows(r1: any, r2: any): any {
+          const t1 = Number(r1.total_responses) || 0
+          const t2 = Number(r2.total_responses) || 0
+          const total = t1 + t2
+          if (total === 0) return r1
+          const metrics = ['feedback_nps', 'comms_nps', 'rel_nps', 'reco_nps', 'rhwb_comms_nps', 'rhwb_knowledge_nps', 'rhwb_reco_nps']
+          const combined: any = { ...r1, total_responses: total }
+          for (const m of metrics) {
+            const v1 = r1[m] != null ? Number(r1[m]) : null
+            const v2 = r2[m] != null ? Number(r2[m]) : null
+            if (v1 === null && v2 === null) combined[m] = null
+            else if (v1 === null) combined[m] = Math.round(v2!)
+            else if (v2 === null) combined[m] = Math.round(v1)
+            else combined[m] = Math.round((v1 * t1 + v2 * t2) / total)
+          }
+          return combined
+        }
+
+        // Recompute 'All' as weighted NPS across New+Return (matches individual-response calculation)
+        function computeAllRows(newReturnRows: any[]): any[] {
+          const groupMap = new Map<string, any[]>()
+          for (const row of newReturnRows) {
+            const key = `${row.season}||${row.program}||${row.coach}`
+            if (!groupMap.has(key)) groupMap.set(key, [])
+            groupMap.get(key)!.push(row)
+          }
+          const allRows: any[] = []
+          const metrics = ['feedback_nps', 'comms_nps', 'rel_nps', 'reco_nps', 'rhwb_comms_nps', 'rhwb_knowledge_nps', 'rhwb_reco_nps']
+          for (const [key, rows] of groupMap) {
+            const [season, program, coach] = key.split('||')
+            const totalResponses = rows.reduce((s: number, r: any) => s + Number(r.total_responses || 0), 0)
+            const allRow: any = {
+              season, season_phase: rows[0].season_phase, program, coach,
+              runner_status: 'All',
+              total_responses: totalResponses
+            }
+            for (const m of metrics) {
+              const valid = rows.filter((r: any) => r[m] != null)
+              if (valid.length === 0) {
+                allRow[m] = null
+              } else {
+                // Weighted average: each row's NPS weighted by its response count
+                const weightedSum = valid.reduce((s: number, r: any) => s + Number(r[m]) * Number(r.total_responses || 0), 0)
+                const totalWeight = valid.reduce((s: number, r: any) => s + Number(r.total_responses || 0), 0)
+                allRow[m] = totalWeight === 0 ? null : Math.round(weightedSum / totalWeight)
+              }
+            }
+            allRows.push(allRow)
+          }
+          return allRows
+        }
+
+        // Build merged Season 15 New/Return map
+        const s15Map = new Map<string, any>()
+        for (const row of s15Supabase.filter((r: any) => r.runner_status !== 'All')) {
+          s15Map.set(`${row.program}||${row.coach}||${row.runner_status}`, row)
+        }
+        for (const row of filteredS15Extra) {
+          const key = `${row.program}||${row.coach}||${row.runner_status}`
+          s15Map.set(key, s15Map.has(key) ? mergeNpsRows(s15Map.get(key), row) : row)
+        }
+
+        const mergedS15NewReturn = Array.from(s15Map.values())
+        const mergedS15All = computeAllRows(mergedS15NewReturn)
+
+        finalData = [...nonS15, ...mergedS15NewReturn, ...mergedS15All]
+      }
+
+      return jsonResponse({ data: finalData })
+    }
+
     return jsonResponse({ error: `Unknown operation: ${operation}` }, 400)
 
   } catch (error) {
