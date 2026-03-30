@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient';
+import { fetchNPSScores } from '../services/cloudSqlService';
 import { useAuth } from '../contexts/AuthContext';
 import { BarChart3, Calendar, ChevronDown, User, Download } from 'lucide-react';
 import InsightsTable from './CoachInsights/components/InsightsTable';
@@ -101,8 +102,7 @@ const MOCK_NPS_DATA = [
 export default function NPSScores() {
   const { user } = useAuth();
   
-  const [userRole, setUserRole] = useState(null);
-  const isAdmin = (userRole || '').toLowerCase() === 'admin';
+  const isAdmin = (user?.role || '').toLowerCase() === 'admin';
 
   const [allData, setAllData] = useState(MOCK_NPS_DATA);
   const [loading, setLoading] = useState(false);
@@ -113,19 +113,19 @@ export default function NPSScores() {
   const [surveyLoading, setSurveyLoading] = useState(false);
   const [surveyError, setSurveyError] = useState(null);
   
-  // Get unique values for dropdowns
-  const seasons = [...new Set(allData.map(d => d.season))];
-  const coaches = [...new Set(allData.map(d => d.coach))];
+  // Get unique values for dropdowns — Season 15 only
+  const seasons = [...new Set(allData.map(d => d.season))].filter(s => s === 'Season 15');
+  const coaches = [...new Set(allData.filter(d => d.season === 'Season 15').map(d => d.coach).filter(Boolean))].sort();
   const programs = ['Pro', 'Masters', 'Walk'];
 
-  const [selectedSeason, setSelectedSeason] = useState(seasons[0] || '');
+  const [selectedSeason, setSelectedSeason] = useState('Season 15');
   const [selectedCoach, setSelectedCoach] = useState('');
 
   // When real data loads, reset selectedSeason if current selection is no longer valid
   useEffect(() => {
-    const availableSeasons = [...new Set(allData.map(d => d.season))];
+    const availableSeasons = [...new Set(allData.map(d => d.season))].filter(s => s === 'Season 15');
     if (availableSeasons.length > 0 && !availableSeasons.includes(selectedSeason)) {
-      setSelectedSeason(availableSeasons[0]);
+      setSelectedSeason('Season 15');
     }
   }, [allData]); // eslint-disable-line react-hooks/exhaustive-deps
   const [coachName, setCoachName] = useState('');
@@ -154,27 +154,32 @@ export default function NPSScores() {
       try {
         setLoading(true);
         setError(null);
-        
-        // Try to fetch from v_nps_scores view
+
+        // Try via edge function (bypasses RLS, uses service role)
+        const edgeData = await fetchNPSScores();
+
+        if (edgeData && edgeData.length > 0) {
+          setAllData(edgeData);
+          return;
+        }
+
+        // Fallback: direct Supabase query (no active session / edge function unavailable)
         const { data, error } = await supabase
           .from('v_nps_scores')
           .select('*');
-        
+
         if (error) {
-          console.warn('v_nps_scores view not available, using mock data:', error);
-          // Fallback to mock data if view doesn't exist
+          console.warn('v_nps_scores fallback error, using mock data:', error);
           setAllData(MOCK_NPS_DATA);
         } else if (data && data.length > 0) {
           setAllData(data);
         } else {
-          // No data in view, use mock data
           setAllData(MOCK_NPS_DATA);
         }
-        
+
       } catch (err) {
         console.error('Failed to load NPS data:', err);
         setError('Failed to load NPS data');
-        // Fallback to mock data
         setAllData(MOCK_NPS_DATA);
       } finally {
         setLoading(false);
@@ -191,12 +196,11 @@ export default function NPSScores() {
         if (!user?.email) return;
         const { data, error } = await supabase
           .from('v_rhwb_roles')
-          .select('full_name, role')
+          .select('full_name')
           .eq('email_id', user.email.toLowerCase())
-          .single();
+          .maybeSingle();
         if (!error && data?.full_name) {
           setCoachName(data.full_name);
-          if (data.role) setUserRole(data.role);
         }
       } catch (e) {
         // ignore
@@ -243,7 +247,7 @@ export default function NPSScores() {
               .from('v_rhwb_roles')
               .select('email_id')
               .eq('full_name', selectedCoach)
-              .single();
+              .maybeSingle();
             coachEmailFilter = coachRow?.email_id?.toLowerCase() || coachEmailFilter;
           }
         }
@@ -295,7 +299,7 @@ export default function NPSScores() {
           .select('season, coach, runners_count, respondents, response_rate_percent, avg_response_rate_for_season')
           .eq('season', selectedSeason)
           .eq('coach', effectiveCoachLocal)
-          .single();
+          .maybeSingle();
 
         if (!error && data) {
           setSurveyRate(data);
@@ -311,23 +315,50 @@ export default function NPSScores() {
     loadSurveyResponseRate();
   }, [selectedSeason, selectedCoach, coachName, isAdmin]);
 
-  // Calculate overall averages across all coaches for the selected season and program
+  // Override surveyRate.respondents with the count derived from allData (NPS scores),
+  // which merges both Supabase and Cloud Run sources. This ensures the respondent count
+  // shown in Survey Response Rate matches the totals displayed in the NPS program cards.
+  const effectiveCoachForRate = isAdmin ? (selectedCoach || coachName) : (coachName || selectedCoach);
+  const npsRespondentCount = allData
+    .filter(d => d.season === selectedSeason && d.coach === effectiveCoachForRate && d.runner_status !== 'All')
+    .reduce((sum, d) => sum + (Number(d.total_responses) || 0), 0);
+
+  const displaySurveyRate = surveyRate && npsRespondentCount > 0
+    ? {
+        ...surveyRate,
+        respondents: npsRespondentCount,
+        response_rate_percent: surveyRate.runners_count
+          ? Math.round((npsRespondentCount / surveyRate.runners_count) * 100)
+          : surveyRate.response_rate_percent,
+      }
+    : surveyRate;
+
+  // Calculate overall averages across all coaches for the selected season and program.
+  // Uses only 'All' rows (one per coach) to avoid double-counting New/Return.
+  // Converts to Number to handle Supabase returning numeric as strings.
   const calculateOverallAverages = (program) => {
-    const programData = allData.filter(d => 
-      d.season === selectedSeason && 
-      d.program === program
+    const programData = allData.filter(d =>
+      d.season === selectedSeason &&
+      d.program === program &&
+      d.runner_status === 'All'
     );
-    
+
     if (programData.length === 0) return null;
-    
+
+    const avg = (field) => {
+      const valid = programData.filter(d => d[field] != null);
+      if (valid.length === 0) return null;
+      return Math.round(valid.reduce((sum, d) => sum + Number(d[field]), 0) / valid.length);
+    };
+
     return {
-      feedback: Math.round(programData.reduce((sum, item) => sum + item.feedback_nps, 0) / programData.length),
-      comms: Math.round(programData.reduce((sum, item) => sum + item.comms_nps, 0) / programData.length),
-      rel: Math.round(programData.reduce((sum, item) => sum + item.rel_nps, 0) / programData.length),
-      reco: Math.round(programData.reduce((sum, item) => sum + item.reco_nps, 0) / programData.length),
-      rhwb_comms: Math.round(programData.reduce((sum, item) => sum + item.rhwb_comms_nps, 0) / programData.length),
-      rhwb_knowledge: Math.round(programData.reduce((sum, item) => sum + item.rhwb_knowledge_nps, 0) / programData.length),
-      rhwb_reco: Math.round(programData.reduce((sum, item) => sum + item.rhwb_reco_nps, 0) / programData.length)
+      feedback: avg('feedback_nps'),
+      comms: avg('comms_nps'),
+      rel: avg('rel_nps'),
+      reco: avg('reco_nps'),
+      rhwb_comms: avg('rhwb_comms_nps'),
+      rhwb_knowledge: avg('rhwb_knowledge_nps'),
+      rhwb_reco: avg('rhwb_reco_nps'),
     };
   };
 
@@ -637,6 +668,7 @@ export default function NPSScores() {
                         onChange={(e) => setSelectedCoach(e.target.value)}
                         className="appearance-none bg-white border border-gray-300 rounded-lg pl-10 pr-8 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent min-w-[200px]"
                       >
+                        <option value="">Select coach...</option>
                         {coaches.map(coach => (
                           <option key={coach} value={coach}>{coach}</option>
                         ))}
@@ -780,19 +812,19 @@ export default function NPSScores() {
             <h3 className="font-semibold text-gray-700 mb-3 text-sm uppercase tracking-wide">Survey Response Rate</h3>
             {surveyRateLoading ? (
               <div className="py-6 text-center text-gray-500 text-sm">Loading...</div>
-            ) : surveyRate ? (
+            ) : displaySurveyRate ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className={`p-4 rounded-lg border-l-4 ${getCardBgColor(surveyRate.response_rate_percent)} border-blue-500`} title="Percentage of your cohort responded to the survey">
-                  <div className={`text-xs mb-1 font-medium ${getScoreColor(surveyRate.response_rate_percent)}`}>Response Rate</div>
-                  <div className={`text-3xl font-bold ${getScoreColor(surveyRate.response_rate_percent)}`}>{Math.round(surveyRate.response_rate_percent)}%</div>
+                <div className={`p-4 rounded-lg border-l-4 ${getCardBgColor(displaySurveyRate.response_rate_percent)} border-blue-500`} title="Percentage of your cohort responded to the survey">
+                  <div className={`text-xs mb-1 font-medium ${getScoreColor(displaySurveyRate.response_rate_percent)}`}>Response Rate</div>
+                  <div className={`text-3xl font-bold ${getScoreColor(displaySurveyRate.response_rate_percent)}`}>{Math.round(displaySurveyRate.response_rate_percent)}%</div>
                 </div>
-                <div className={`p-4 rounded-lg border-l-4 ${getCardBgColor(surveyRate.avg_response_rate_for_season)} border-purple-500`} title="Average Response Rate across all coaches this season">
-                  <div className={`text-xs mb-1 font-medium ${getScoreColor(surveyRate.avg_response_rate_for_season)}`}>Season Average</div>
-                  <div className={`text-3xl font-bold ${getScoreColor(surveyRate.avg_response_rate_for_season)}`}>{Math.round(surveyRate.avg_response_rate_for_season)}%</div>
+                <div className={`p-4 rounded-lg border-l-4 ${getCardBgColor(displaySurveyRate.avg_response_rate_for_season)} border-purple-500`} title="Average Response Rate across all coaches this season">
+                  <div className={`text-xs mb-1 font-medium ${getScoreColor(displaySurveyRate.avg_response_rate_for_season)}`}>Season Average</div>
+                  <div className={`text-3xl font-bold ${getScoreColor(displaySurveyRate.avg_response_rate_for_season)}`}>{Math.round(displaySurveyRate.avg_response_rate_for_season)}%</div>
                 </div>
                 <div className="p-4 bg-gray-50 rounded-lg border" title="No of respondents compared to total no of runners in your cohort">
                   <div className="text-xs text-gray-600 mb-1">Respondents / Total Runners</div>
-                  <div className="text-3xl font-bold text-gray-800">{surveyRate.respondents} / {surveyRate.runners_count}</div>
+                  <div className="text-3xl font-bold text-gray-800">{displaySurveyRate.respondents} / {displaySurveyRate.runners_count}</div>
                 </div>
               </div>
             ) : (
