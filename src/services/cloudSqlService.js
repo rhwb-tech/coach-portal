@@ -20,6 +20,16 @@ async function callEdgeFunction(operation, params = {}) {
   return data;
 }
 
+export async function fetchNPSScores() {
+  try {
+    const result = await callEdgeFunction('get-nps-scores');
+    return result?.data ?? null;
+  } catch (error) {
+    console.error('Failed to fetch NPS scores via edge function:', error);
+    return null;
+  }
+}
+
 export async function fetchQualScores(season, meso = null, coachEmail = null) {
   try {
     const params = { season };
