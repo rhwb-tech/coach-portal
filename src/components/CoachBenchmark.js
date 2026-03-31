@@ -5,6 +5,22 @@ import { MessageSquare } from 'lucide-react';
 
 const selectedSeason = 'Season 15';
 
+const CATEGORY_COLORS = {
+  'Technical Feedback':         '#10B981',
+  'Acknowledgement':            '#EF4444',
+  'Positive Feedback':          '#F59E0B',
+  'General':                    '#8B5CF6',
+  'Motivation & Encouragement': '#3B82F6',
+};
+
+const CATEGORY_ORDER = [
+  'Technical Feedback',
+  'Acknowledgement',
+  'Positive Feedback',
+  'General',
+  'Motivation & Encouragement',
+];
+
 export default function CoachBenchmark() {
   const [surveyData, setSurveyData] = useState([]);
   const [npsData, setNpsData] = useState([]);
@@ -115,15 +131,6 @@ export default function CoachBenchmark() {
     return map;
   }, [rlbData]);
 
-  // Build coach name -> email map from rlbData
-  const coachEmailMap = useMemo(() => {
-    const map = {};
-    for (const row of rlbData) {
-      if (row.coach && row.email_id) map[row.coach] = row.email_id;
-    }
-    return map;
-  }, [rlbData]);
-
   const toggleComments = useCallback(async (coachName) => {
     // Collapse if already open
     if (expandedCoach === coachName) { setExpandedCoach(null); return; }
@@ -180,21 +187,6 @@ export default function CoachBenchmark() {
   }, [rlbData]);
 
   // Build category map: coach -> { category -> count }
-  const CATEGORY_COLORS = {
-    'Technical Feedback':      '#10B981',
-    'Acknowledgement':         '#EF4444',
-    'Positive Feedback':       '#F59E0B',
-    'General':                 '#8B5CF6',
-    'Motivation & Encouragement': '#3B82F6',
-  };
-  const CATEGORY_ORDER = [
-    'Technical Feedback',
-    'Acknowledgement',
-    'Positive Feedback',
-    'General',
-    'Motivation & Encouragement',
-  ];
-
   const categoryMap = useMemo(() => {
     const map = {};
     for (const row of categoryData) {
