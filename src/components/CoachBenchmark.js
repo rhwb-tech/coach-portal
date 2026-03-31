@@ -365,7 +365,7 @@ export default function CoachBenchmark() {
 
   const rateCellClass = (rate) => {
     if (rate === null || rate === undefined || rate === 0) return 'text-gray-400';
-    if (rate > 95)  return 'bg-green-800 text-white font-semibold';
+    if (rate >= 95) return 'bg-green-800 text-white font-semibold';
     if (rate >= 70) return 'bg-green-100 text-green-800 font-semibold';
     if (rate >= 40) return 'bg-orange-100 text-orange-800 font-semibold';
     return 'bg-pink-100 text-pink-800 font-semibold';
