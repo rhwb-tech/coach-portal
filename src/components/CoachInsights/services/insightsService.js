@@ -208,54 +208,40 @@ class InsightsService {
         }
       }
 
-      // Handle coach_rlb queries (runners left behind)
+      // Handle coach_rlb queries (runners left behind) — source: mv_coach_metrics
       if (sql.includes('coach_rlb')) {
         try {
           const [seasonParam, coachEmailParam, mesoParam] = params;
-          // coach_rlb.season is stored as "Season 13", "Season 14" etc.; app may pass id (14) or name ("Season 14")
           let season = seasonParam != null ? String(seasonParam).trim() : seasonParam;
           if (season && !season.toLowerCase().startsWith('season')) {
             const num = parseInt(season, 10);
             if (!Number.isNaN(num)) season = `Season ${num}`;
           }
-          const meso = mesoParam != null && mesoParam !== '' ? String(mesoParam) : null;
+          // mv_coach_metrics stores meso as "Meso 1", "Meso 2" etc.
+          let meso = null;
+          if (mesoParam != null && mesoParam !== '') {
+            const m = String(mesoParam).trim();
+            meso = m.toLowerCase().startsWith('meso') ? m : `Meso ${m}`;
+          }
           const coachVal = coachEmailParam != null ? String(coachEmailParam).trim() : coachEmailParam;
           if (coachVal == null || coachVal === '') return [];
 
-          // Match coach by either coach_email or email_id; quote value so @ and . in emails don't break PostgREST .or()
-          const escaped = coachVal.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-          const orFilter = `coach_email.ilike."${escaped}",email_id.ilike."${escaped}"`;
-          let q = supabase.from('coach_rlb')
-            .select('runner_name')
+          let q = supabase.from('mv_coach_metrics')
+            .select('runners_left_behind')
             .eq('season', season)
-            .or(orFilter);
-          if (meso != null) {
-            q = q.eq('meso', meso);
-          }
-          let { data, error } = await q;
-          // If .or() fails (e.g. syntax), fallback to coach_email only
-          if (error) {
-            let fb = supabase.from('coach_rlb')
-              .select('runner_name')
-              .eq('season', season)
-              .ilike('coach_email', coachVal);
-            if (meso != null) fb = fb.eq('meso', meso);
-            const res = await fb;
-            if (!res.error) {
-              data = res.data;
-              error = null;
-            }
-          }
+            .ilike('email_id', coachVal);
+          if (meso != null) q = q.eq('meso', meso);
+
+          const { data, error } = await q;
           if (error) throw error;
-          // Dedupe by runner_name in case both columns matched
+
+          // Parse comma-separated runner names into [{ runner_name }] rows
+          const names = (data || [])
+            .flatMap(r => (r.runners_left_behind || '').split(',').map(n => n.trim()).filter(Boolean));
           const seen = new Set();
-          const out = (data || []).filter((r) => {
-            const key = r.runner_name;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          });
-          return out;
+          return names
+            .filter(n => { if (seen.has(n)) return false; seen.add(n); return true; })
+            .map(n => ({ runner_name: n }));
         } catch (queryError) {
           throw queryError;
         }
@@ -455,7 +441,6 @@ class InsightsService {
       return [
         { runner_name: 'John Smith' },
         { runner_name: 'Sarah Johnson' },
-        { runner_name: 'Mike Davis' }
       ];
     }
 

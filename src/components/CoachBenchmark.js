@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { fetchNPSScores } from '../services/cloudSqlService';
+import { MessageSquare } from 'lucide-react';
 
 const selectedSeason = 'Season 15';
 
@@ -9,8 +10,11 @@ export default function CoachBenchmark() {
   const [npsData, setNpsData] = useState([]);
   const [rlbData, setRlbData] = useState([]);
   const [categoryData, setCategoryData] = useState([]);
+  const [liteRow, setLiteRow] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sortConfig, setSortConfig] = useState({ key: 'coach', dir: 'asc' });
+  const [expandedCoach, setExpandedCoach] = useState(null); // coach name
+  const [commentsCache, setCommentsCache] = useState({});   // { coachName: { coach: [], rhwb: [], loading: false } }
 
   useEffect(() => {
     const load = async () => {
@@ -45,6 +49,37 @@ export default function CoachBenchmark() {
         setNpsData((npsResult || []).filter(d => d.season === selectedSeason && d.runner_status === 'All'));
         setRlbData(rlbResult.data || []);
         setCategoryData(categoryResult.data || []);
+
+        // Lite runners (no coach assigned)
+        const [liteRunnersRes, liteRespondentsRes] = await Promise.all([
+          supabase
+            .from('runner_season_info')
+            .select('email_id')
+            .eq('season', selectedSeason)
+            .eq('segment', 'Lite'),
+          supabase
+            .from('nps_survey_responses')
+            .select('rhwb_recommendation')
+            .eq('season', selectedSeason)
+            .is('coach_email', null)
+        ]);
+        const liteRunners     = (liteRunnersRes.data || []).length;
+        const liteResponses   = liteRespondentsRes.data || [];
+        const liteRespondents = liteResponses.length;
+
+        // Compute RHWB NPS from individual rhwb_recommendation scores
+        const scores = liteResponses.map(r => Number(r.rhwb_recommendation)).filter(s => !isNaN(s));
+        const promoters  = scores.filter(s => s >= 9).length;
+        const detractors = scores.filter(s => s <= 6).length;
+        const liteRhwbNps = scores.length > 0 ? Math.round(((promoters - detractors) / scores.length) * 100) : null;
+
+        setLiteRow({
+          coach: 'Lite (No Coach)',
+          respondents: liteRespondents,
+          runners_count: liteRunners,
+          response_rate: liteRunners > 0 ? Math.round((liteRespondents / liteRunners) * 100) : null,
+          coach_nps: null, rhwb_nps: liteRhwbNps, feedback_ratio: null,
+        });
       } catch {
         // silently handle
       } finally {
@@ -79,6 +114,53 @@ export default function CoachBenchmark() {
     }
     return map;
   }, [rlbData]);
+
+  // Build coach name -> email map from rlbData
+  const coachEmailMap = useMemo(() => {
+    const map = {};
+    for (const row of rlbData) {
+      if (row.coach && row.email_id) map[row.coach] = row.email_id;
+    }
+    return map;
+  }, [rlbData]);
+
+  const toggleComments = useCallback(async (coachName) => {
+    // Collapse if already open
+    if (expandedCoach === coachName) { setExpandedCoach(null); return; }
+    setExpandedCoach(coachName);
+    // Return if already cached
+    if (commentsCache[coachName]) return;
+    // Mark loading
+    setCommentsCache(prev => ({ ...prev, [coachName]: { coach: [], rhwb: [], loading: true } }));
+    try {
+      // Resolve coach email from v_rhwb_roles by exact name match
+      const { data: roleData } = await supabase
+        .from('v_rhwb_roles')
+        .select('email_id')
+        .eq('full_name', coachName)
+        .maybeSingle();
+      const email = roleData?.email_id || null;
+
+      let q = supabase
+        .from('nps_survey_responses')
+        .select('comments, rhwb_comments')
+        .eq('season', selectedSeason);
+      if (email) q = q.ilike('coach_email', email);
+      else q = q.is('coach_email', null);
+      const { data } = await q;
+      const rows = data || [];
+      setCommentsCache(prev => ({
+        ...prev,
+        [coachName]: {
+          loading: false,
+          coach: rows.map(r => r.comments).filter(Boolean),
+          rhwb:  rows.map(r => r.rhwb_comments).filter(Boolean),
+        }
+      }));
+    } catch {
+      setCommentsCache(prev => ({ ...prev, [coachName]: { coach: [], rhwb: [], loading: false } }));
+    }
+  }, [expandedCoach, commentsCache]);
 
   // Build runner count sparkline data: coach -> [{ meso_no, count }] sorted by meso_no
   const runnerSparkMap = useMemo(() => {
@@ -206,6 +288,53 @@ export default function CoachBenchmark() {
     });
   }, [tableData, sortConfig, feedbackRatioMap]);
 
+  const footerData = useMemo(() => {
+    // Respondents + runners: sum from tableData
+    const totalRespondents = tableData.reduce((s, r) => s + (r.respondents || 0), 0);
+    const totalRunners     = tableData.reduce((s, r) => s + (r.runners_count || 0), 0);
+    const responseRate = totalRunners > 0 ? Math.round((totalRespondents / totalRunners) * 100) : null;
+
+    // NPS: weighted across all npsData rows (true dataset-level NPS, not average of coaches)
+    let coachNpsSum = 0, rhwbNpsSum = 0, npsWeight = 0;
+    for (const row of npsData) {
+      const w = Number(row.total_responses) || 1;
+      coachNpsSum += Number(row.reco_nps) * w;
+      rhwbNpsSum  += Number(row.rhwb_reco_nps) * w;
+      npsWeight   += w;
+    }
+    const coachNps = npsWeight > 0 ? Math.round(coachNpsSum / npsWeight) : null;
+    const rhwbNps  = npsWeight > 0 ? Math.round(rhwbNpsSum  / npsWeight) : null;
+
+    // Feedback ratio: sum raw runs across all coaches/mesos
+    let withComments = 0, withoutComments = 0;
+    for (const row of rlbData) {
+      withComments    += Number(row.runs_with_comments)    || 0;
+      withoutComments += Number(row.runs_with_no_comments) || 0;
+    }
+    const feedbackRatio = (withComments + withoutComments) > 0
+      ? Math.round((withComments / (withComments + withoutComments)) * 100)
+      : null;
+
+    // RLB per meso: sum across all coaches
+    const rlbByMeso = {};
+    for (const mesoMap of Object.values(rlbMap)) {
+      for (const [meso, count] of Object.entries(mesoMap)) {
+        rlbByMeso[meso] = (rlbByMeso[meso] || 0) + count;
+      }
+    }
+
+    // Category totals across all coaches
+    const catTotals = {};
+    for (const cats of Object.values(categoryMap)) {
+      for (const cat of CATEGORY_ORDER) {
+        catTotals[cat] = (catTotals[cat] || 0) + (cats[cat] || 0);
+      }
+    }
+    const catTotal = CATEGORY_ORDER.reduce((s, c) => s + (catTotals[c] || 0), 0);
+
+    return { totalRespondents, totalRunners, responseRate, coachNps, rhwbNps, feedbackRatio, rlbByMeso, catTotals, catTotal };
+  }, [tableData, npsData, rlbData, rlbMap, categoryMap]);
+
   const handleSort = (key) => {
     setSortConfig(prev =>
       prev.key === key
@@ -221,25 +350,26 @@ export default function CoachBenchmark() {
 
   const npsCellClass = (score) => {
     if (score === null || score === undefined) return 'text-gray-400';
-    if (score > 90) return 'bg-green-800 text-white font-semibold';
-    if (score >= 50) return 'bg-green-100 text-green-800 font-semibold';
+    if (score > 80)  return 'bg-green-800 text-white font-semibold';
+    if (score > 50)  return 'bg-green-100 text-green-800 font-semibold';
     if (score >= 0)  return 'bg-orange-100 text-orange-800 font-semibold';
-    if (score >= -50) return 'bg-pink-100 text-pink-800 font-semibold';
-    return 'bg-red-600 text-white font-semibold';
+    return 'bg-pink-100 text-pink-800 font-semibold';
   };
 
   const rateCellClass = (rate) => {
     if (rate === null || rate === undefined || rate === 0) return 'text-gray-400';
-    if (rate >= 80) return 'bg-green-100 text-green-800 font-semibold';
-    if (rate >= 50) return 'bg-orange-100 text-orange-800 font-semibold';
+    if (rate > 95)  return 'bg-green-800 text-white font-semibold';
+    if (rate >= 70) return 'bg-green-100 text-green-800 font-semibold';
+    if (rate >= 40) return 'bg-orange-100 text-orange-800 font-semibold';
     return 'bg-pink-100 text-pink-800 font-semibold';
   };
 
   const feedbackRatioCellClass = (ratio) => {
     if (ratio === null || ratio === undefined) return 'text-gray-400';
-    if (ratio >= 90) return 'bg-green-100 text-green-800 font-semibold';
-    if (ratio >= 70) return 'bg-orange-100 text-orange-800 font-semibold';
-    return 'bg-red-100 text-red-800 font-semibold';
+    if (ratio > 95)  return 'bg-green-800 text-white font-semibold';
+    if (ratio >= 75) return 'bg-green-100 text-green-800 font-semibold';
+    if (ratio >= 50) return 'bg-orange-100 text-orange-800 font-semibold';
+    return 'bg-pink-100 text-pink-800 font-semibold';
   };
 
   const rlbBlockClass = (count) => {
@@ -294,10 +424,10 @@ export default function CoachBenchmark() {
           <p className="text-sm text-gray-500 mt-1">{selectedSeason} — Coach KPIs Overview</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-auto max-h-[calc(100vh-180px)]">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
+              <tr className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
                 {[
                   { key: 'coach',         label: 'Coach',          align: 'left'   },
                   { key: 'respondents',   label: 'Respondents',    align: 'center' },
@@ -330,7 +460,8 @@ export default function CoachBenchmark() {
                 const coachCats = categoryMap[row.coach] || {};
                 const catTotal = CATEGORY_ORDER.reduce((s, c) => s + (coachCats[c] || 0), 0);
                 return (
-                  <tr key={row.coach} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                  <React.Fragment key={row.coach}>
+                  <tr className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                     <td className="px-4 py-3 text-gray-900 font-medium">{row.coach}</td>
                     <td className="px-4 py-3 text-center text-gray-700">
                       {row.respondents > 0 ? row.respondents : '—'}
@@ -344,11 +475,21 @@ export default function CoachBenchmark() {
                     <td className={`px-4 py-3 text-center ${rateCellClass(row.response_rate)}`}>
                       {row.response_rate > 0 ? `${row.response_rate}%` : '—'}
                     </td>
-                    <td className={`px-4 py-3 text-center ${npsCellClass(row.coach_nps)}`}>
-                      {row.coach_nps !== null ? row.coach_nps : '—'}
+                    <td className={`px-4 py-3 ${npsCellClass(row.coach_nps)}`}>
+                      <div className="flex items-center justify-center gap-1">
+                        <span>{row.coach_nps !== null ? row.coach_nps : '—'}</span>
+                        <button onClick={() => toggleComments(row.coach)} title="View qualitative feedback" className="opacity-60 hover:opacity-100 transition-opacity flex-shrink-0">
+                          <MessageSquare className="h-3 w-3" />
+                        </button>
+                      </div>
                     </td>
-                    <td className={`px-4 py-3 text-center ${npsCellClass(row.rhwb_nps)}`}>
-                      {row.rhwb_nps !== null ? row.rhwb_nps : '—'}
+                    <td className={`px-4 py-3 ${npsCellClass(row.rhwb_nps)}`}>
+                      <div className="flex items-center justify-center gap-1">
+                        <span>{row.rhwb_nps !== null ? row.rhwb_nps : '—'}</span>
+                        <button onClick={() => toggleComments(row.coach)} title="View qualitative feedback" className="opacity-60 hover:opacity-100 transition-opacity flex-shrink-0">
+                          <MessageSquare className="h-3 w-3" />
+                        </button>
+                      </div>
                     </td>
                     <td className={`px-4 py-3 text-center ${feedbackRatioCellClass(feedbackRatio)}`}>
                       {feedbackRatio !== null ? `${feedbackRatio}%` : '—'}
@@ -394,9 +535,129 @@ export default function CoachBenchmark() {
                       )}
                     </td>
                   </tr>
+                  {expandedCoach === row.coach && (() => {
+                    const cached = commentsCache[row.coach];
+                    return (
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        <td colSpan={10} className="px-6 py-4">
+                          {cached?.loading ? (
+                            <div className="flex items-center gap-2 text-sm text-gray-500">
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
+                              Loading feedback…
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-6">
+                              <div>
+                                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Coach Qualitative Feedback</div>
+                                {(cached?.coach || []).length === 0 ? (
+                                  <p className="text-sm text-gray-400 italic">No comments.</p>
+                                ) : (
+                                  <ul className="space-y-2">
+                                    {cached.coach.map((c, idx) => (
+                                      <li key={idx} className="text-sm text-gray-700 border-l-2 border-blue-300 pl-3 py-0.5">{c}</li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                              <div>
+                                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">RHWB Qualitative Feedback</div>
+                                {(cached?.rhwb || []).length === 0 ? (
+                                  <p className="text-sm text-gray-400 italic">No comments.</p>
+                                ) : (
+                                  <ul className="space-y-2">
+                                    {cached.rhwb.map((c, idx) => (
+                                      <li key={idx} className="text-sm text-gray-700 border-l-2 border-green-300 pl-3 py-0.5">{c}</li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })()}
+                  </React.Fragment>
                 );
               })}
+              {liteRow && (() => {
+                const rate = liteRow.response_rate;
+                return (
+                  <tr className="bg-blue-50 border-t border-blue-200 italic">
+                    <td className="px-4 py-3 text-gray-700 font-medium">{liteRow.coach}</td>
+                    <td className="px-4 py-3 text-center text-gray-700">{liteRow.respondents > 0 ? liteRow.respondents : '—'}</td>
+                    <td className="px-4 py-3 text-center text-gray-700">{liteRow.runners_count > 0 ? liteRow.runners_count : '—'}</td>
+                    <td className="px-4 py-3 text-center text-gray-400">—</td>
+                    <td className={`px-4 py-3 text-center ${rate !== null ? rateCellClass(rate) : 'text-gray-400'}`}>
+                      {rate !== null ? `${rate}%` : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-center text-gray-400">—</td>
+                    <td className={`px-4 py-3 text-center ${liteRow.rhwb_nps !== null ? npsCellClass(liteRow.rhwb_nps) : 'text-gray-400'}`}>
+                      {liteRow.rhwb_nps !== null ? liteRow.rhwb_nps : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-center text-gray-400">—</td>
+                    <td className="px-4 py-3 text-center text-gray-400">—</td>
+                    <td className="px-4 py-3 text-center text-gray-400">—</td>
+                  </tr>
+                );
+              })()}
             </tbody>
+            <tfoot>
+              <tr className="bg-gray-100 border-t-2 border-gray-300 font-semibold text-gray-800 sticky bottom-0 z-10">
+                <td className="px-4 py-3 text-gray-900">Total / Average</td>
+                <td className="px-4 py-3 text-center">{footerData.totalRespondents || '—'}</td>
+                <td className="px-4 py-3 text-center">{footerData.totalRunners || '—'}</td>
+                <td className="px-4 py-3 text-center text-gray-400 text-xs">—</td>
+                <td className={`px-4 py-3 text-center ${rateCellClass(footerData.responseRate)}`}>
+                  {footerData.responseRate !== null ? `${footerData.responseRate}%` : '—'}
+                </td>
+                <td className={`px-4 py-3 text-center ${npsCellClass(footerData.coachNps)}`}>
+                  {footerData.coachNps !== null ? footerData.coachNps : '—'}
+                </td>
+                <td className={`px-4 py-3 text-center ${npsCellClass(footerData.rhwbNps)}`}>
+                  {footerData.rhwbNps !== null ? footerData.rhwbNps : '—'}
+                </td>
+                <td className={`px-4 py-3 text-center ${feedbackRatioCellClass(footerData.feedbackRatio)}`}>
+                  {footerData.feedbackRatio !== null ? `${footerData.feedbackRatio}%` : '—'}
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-1 justify-center">
+                    {allMesos.map(meso => {
+                      const count = footerData.rlbByMeso[meso] ?? null;
+                      return (
+                        <div
+                          key={meso}
+                          className={`flex items-center justify-center rounded w-7 h-7 text-xs font-semibold ${count !== null ? rlbBlockClass(count) : 'bg-gray-100 text-gray-400'}`}
+                          title={`Meso ${meso}: ${count ?? 'no data'}`}
+                        >
+                          {count !== null ? count : '—'}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  {footerData.catTotal === 0 ? (
+                    <span className="text-gray-400 text-xs">—</span>
+                  ) : (
+                    <div className="flex h-4 rounded overflow-hidden w-full min-w-24">
+                      {CATEGORY_ORDER.map(cat => {
+                        const count = footerData.catTotals[cat] || 0;
+                        if (count === 0) return null;
+                        const pct = (count / footerData.catTotal) * 100;
+                        return (
+                          <div
+                            key={cat}
+                            style={{ width: `${pct}%`, backgroundColor: CATEGORY_COLORS[cat] }}
+                            title={`${cat}: ${count} (${Math.round(pct)}%)`}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </td>
+              </tr>
+            </tfoot>
           </table>
           {tableData.length === 0 && (
             <div className="text-center py-12 text-gray-500">No data available.</div>
