@@ -43,6 +43,7 @@ class NavigationLogger {
       'dashboard': 'Runner Metrics',
       'small-council': 'OneRHWB', 
       'coach-insights': 'Coach Insights',
+      'coach-benchmark': 'Coach Benchmark',
       'user-guide': 'User Guide'
     };
     

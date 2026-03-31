@@ -4,7 +4,13 @@ const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
 const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables. Please check your .env file.');
+  const hint = typeof window !== 'undefined' && window.location?.hostname !== 'localhost'
+    ? ' On Vercel/production: set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY in Project Settings → Environment Variables, then redeploy.'
+    : ' Check your .env file.';
+  throw new Error('Missing Supabase environment variables.' + hint);
+}
+if (!supabaseUrl.includes('supabase.co')) {
+  console.warn('Supabase URL may be incorrect (expected *supabase.co). On Vercel, set REACT_APP_SUPABASE_URL and redeploy.');
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {

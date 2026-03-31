@@ -368,9 +368,14 @@ export const AuthProvider = ({ children }) => {
         isProcessingAuthChange.current = true;
         
         try {
-          // Only process auth state changes for actual auth events, not visibility changes
-          if (event !== 'SIGNED_IN' && event !== 'SIGNED_OUT' && event !== 'TOKEN_REFRESHED') {
-            // Ignore other events to prevent clearing user state
+          // Handle initial session load (Supabase v2 fires INITIAL_SESSION on subscription)
+          // and actual auth events. Ignore all other events (visibility changes, etc.)
+          if (
+            event !== 'SIGNED_IN' &&
+            event !== 'SIGNED_OUT' &&
+            event !== 'TOKEN_REFRESHED' &&
+            event !== 'INITIAL_SESSION'
+          ) {
             return;
           }
 

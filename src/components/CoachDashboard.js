@@ -12,6 +12,7 @@ import UserGuide from './UserGuide';
 import CoachInsights from './CoachInsights/CoachInsights';
 import NPSScores from './NPSScores';
 import ClubNPSScores from './ClubNPSScores';
+import CoachBenchmark from './CoachBenchmark';
 
 const CoachDashboard = () => {
   const { user, isLoading, logout, isEmailSent } = useAuth();
@@ -1358,14 +1359,31 @@ const CoachDashboard = () => {
                 <BarChart3 className="h-4 w-4" />
                 <span>NPS Scores</span>
               </button>
-              
+
+              {isAdmin() && (
+                <button
+                  onClick={() => {
+                    updateCurrentView('coach-benchmark');
+                    setHamburgerMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
+                    currentView === 'coach-benchmark'
+                      ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <TrendingUp className="h-4 w-4" />
+                  <span>Coach Benchmark</span>
+                </button>
+              )}
+
               {isAdmin() && (
                 <div className="relative admin-menu-container">
                   <button
                     onClick={() => setAdminMenuOpen(!adminMenuOpen)}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
                       (currentView === 'small-council' || currentView === 'club-nps-scores')
-                        ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                        ? 'bg-blue-50 text-blue-700 border border-blue-200'
                         : 'text-gray-700 hover:bg-gray-50'
                     }`}
                   >
@@ -1614,14 +1632,31 @@ const CoachDashboard = () => {
               <BarChart3 className="h-4 w-4" />
               <span>NPS Scores</span>
             </button>
-            
+
+            {isAdmin() && (
+              <button
+                onClick={() => {
+                  updateCurrentView('coach-benchmark');
+                  setHamburgerMenuOpen(false);
+                }}
+                className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
+                  currentView === 'coach-benchmark'
+                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <TrendingUp className="h-4 w-4" />
+                <span>Coach Benchmark</span>
+              </button>
+            )}
+
             {isAdmin() && (
               <div className="relative admin-menu-container">
                 <button
                   onClick={() => setAdminMenuOpen(!adminMenuOpen)}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
                     (currentView === 'small-council' || currentView === 'club-nps-scores')
-                      ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                      ? 'bg-blue-50 text-blue-700 border border-blue-200'
                       : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >
@@ -1974,6 +2009,8 @@ const CoachDashboard = () => {
         <CoachInsights />
       ) : currentView === 'nps-scores' ? (
         <NPSScores />
+      ) : currentView === 'coach-benchmark' && isAdmin() ? (
+        <CoachBenchmark />
       ) : currentView === 'club-nps-scores' ? (
         <ClubNPSScores />
       ) : currentView === 'small-council' ? (
