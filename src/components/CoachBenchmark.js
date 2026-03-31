@@ -2,6 +2,10 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { fetchNPSScores } from '../services/cloudSqlService';
 import { MessageSquare } from 'lucide-react';
+import {
+  ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip,
+  ReferenceLine, ResponsiveContainer, Cell
+} from 'recharts';
 
 const selectedSeason = 'Season 15';
 
@@ -184,6 +188,17 @@ export default function CoachBenchmark() {
         .map(([mesoNo, count]) => ({ meso: Number(mesoNo), count }));
     }
     return result;
+  }, [rlbData]);
+
+  // Build Meso 3 runner count map: coach -> runner_count
+  const meso3RunnerMap = useMemo(() => {
+    const map = {};
+    for (const row of rlbData) {
+      if (row.meso === 'Meso 3') {
+        map[row.coach] = (map[row.coach] || 0) + (Number(row.runner_count) || 0);
+      }
+    }
+    return map;
   }, [rlbData]);
 
   // Build category map: coach -> { category -> count }
@@ -655,6 +670,206 @@ export default function CoachBenchmark() {
             <div className="text-center py-12 text-gray-500">No data available.</div>
           )}
         </div>
+
+        {/* Bubble Chart: Response Rate vs Coach NPS, sized by Feedback Ratio */}
+        <div className="mt-8 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <h2 className="text-base font-semibold text-gray-700 mb-1">
+            Response Rate vs Coach NPS
+          </h2>
+          <p className="text-xs text-gray-400 mb-6">
+            Bubble size = Feedback Ratio &nbsp;·&nbsp; Excludes coaches with missing data
+          </p>
+          <ResponsiveContainer width="100%" height={420} className="mt-4">
+            <ScatterChart margin={{ top: 50, right: 40, bottom: 40, left: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+
+              {/* Quadrant lines */}
+              <ReferenceLine x={50}  stroke="#d1d5db" strokeDasharray="4 4" />
+              <ReferenceLine y={50}  stroke="#d1d5db" strokeDasharray="4 4" />
+
+              <XAxis
+                type="number"
+                dataKey="x"
+                name="Response Rate"
+                domain={[0, 100]}
+                tickFormatter={v => `${v}%`}
+                label={{ value: 'Response Rate (%)', position: 'insideBottom', offset: -20, fontSize: 12, fill: '#6b7280' }}
+              />
+              <YAxis
+                type="number"
+                dataKey="y"
+                name="Coach NPS"
+                domain={[-100, 100]}
+                label={{ value: 'Coach NPS', angle: -90, position: 'insideLeft', offset: 10, fontSize: 12, fill: '#6b7280' }}
+              />
+
+              <Tooltip
+                cursor={{ strokeDasharray: '3 3' }}
+                content={({ payload }) => {
+                  if (!payload || !payload.length) return null;
+                  const d = payload[0].payload;
+                  return (
+                    <div className="bg-white border border-gray-200 rounded shadow px-3 py-2 text-xs">
+                      <p className="font-semibold text-gray-800 mb-1">{d.coach}</p>
+                      <p className="text-gray-600">Response Rate: <span className="font-medium">{d.x}%</span></p>
+                      <p className="text-gray-600">Coach NPS: <span className="font-medium">{d.y}</span></p>
+                      <p className="text-gray-600">Feedback Ratio: <span className="font-medium">{d.r}%</span></p>
+                    </div>
+                  );
+                }}
+              />
+
+              <Scatter
+                data={sortedTableData
+                  .filter(row => row.response_rate != null && row.coach_nps != null && row.feedback_ratio != null)
+                  .map(row => ({
+                    coach: row.coach,
+                    x: row.response_rate,
+                    y: row.coach_nps,
+                    r: row.feedback_ratio,
+                  }))}
+                shape={(props) => {
+                  const { cx, cy, payload } = props;
+                  // Scale feedback_ratio (0-100) to radius 8-32
+                  const radius = 8 + ((payload.r / 100) * 24);
+                  // Color by NPS quadrant
+                  let fill = '#f87171'; // pink default (<0)
+                  if (payload.y > 80)      fill = '#166534'; // dark green
+                  else if (payload.y > 50) fill = '#86efac'; // light green
+                  else if (payload.y >= 0) fill = '#fdba74'; // orange
+                  return (
+                    <g>
+                      <circle cx={cx} cy={cy} r={radius} fill={fill} fillOpacity={0.75} stroke={fill} strokeWidth={1} />
+                      {radius >= 14 && (
+                        <text
+                          x={cx} y={cy}
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          fontSize={9}
+                          fill="#1f2937"
+                          style={{ pointerEvents: 'none' }}
+                        >
+                          {payload.coach.split(' ')[0]}
+                        </text>
+                      )}
+                    </g>
+                  );
+                }}
+              >
+                {sortedTableData
+                  .filter(row => row.response_rate != null && row.coach_nps != null && row.feedback_ratio != null)
+                  .map((row, i) => <Cell key={i} />)}
+              </Scatter>
+            </ScatterChart>
+          </ResponsiveContainer>
+
+          {/* Legend */}
+          <div className="flex gap-6 justify-center mt-4 text-xs text-gray-500">
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-green-800 opacity-75" /> NPS &gt; 80</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-green-300 opacity-75" /> NPS 51–80</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-orange-300 opacity-75" /> NPS 0–50</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-red-400 opacity-75" /> NPS &lt; 0</span>
+            <span className="flex items-center gap-1 ml-4 text-gray-400 italic">Bubble size = Feedback Ratio</span>
+          </div>
+        </div>
+
+        {/* Bubble Chart 2: Response Rate vs Coach NPS, sized by Meso 3 Runner Count */}
+        <div className="mt-8 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <h2 className="text-base font-semibold text-gray-700 mb-1">
+            Response Rate vs Coach NPS
+          </h2>
+          <p className="text-xs text-gray-400 mb-6">
+            Bubble size = # of Runners in Meso 3 &nbsp;·&nbsp; Excludes coaches with missing data
+          </p>
+          <ResponsiveContainer width="100%" height={420} className="mt-4">
+            <ScatterChart margin={{ top: 50, right: 40, bottom: 40, left: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <ReferenceLine x={50} stroke="#d1d5db" strokeDasharray="4 4" />
+              <ReferenceLine y={50} stroke="#d1d5db" strokeDasharray="4 4" />
+              <XAxis
+                type="number"
+                dataKey="x"
+                name="Response Rate"
+                domain={[0, 100]}
+                tickFormatter={v => `${v}%`}
+                label={{ value: 'Response Rate (%)', position: 'insideBottom', offset: -20, fontSize: 12, fill: '#6b7280' }}
+              />
+              <YAxis
+                type="number"
+                dataKey="y"
+                name="Coach NPS"
+                domain={[-100, 100]}
+                label={{ value: 'Coach NPS', angle: -90, position: 'insideLeft', offset: 10, fontSize: 12, fill: '#6b7280' }}
+              />
+              <Tooltip
+                cursor={{ strokeDasharray: '3 3' }}
+                content={({ payload }) => {
+                  if (!payload || !payload.length) return null;
+                  const d = payload[0].payload;
+                  return (
+                    <div className="bg-white border border-gray-200 rounded shadow px-3 py-2 text-xs">
+                      <p className="font-semibold text-gray-800 mb-1">{d.coach}</p>
+                      <p className="text-gray-600">Response Rate: <span className="font-medium">{d.x}%</span></p>
+                      <p className="text-gray-600">Coach NPS: <span className="font-medium">{d.y}</span></p>
+                      <p className="text-gray-600">Meso 3 Runners: <span className="font-medium">{d.r}</span></p>
+                    </div>
+                  );
+                }}
+              />
+              <Scatter
+                data={sortedTableData
+                  .filter(row => row.response_rate != null && row.coach_nps != null && meso3RunnerMap[row.coach] != null)
+                  .map(row => ({
+                    coach: row.coach,
+                    x: row.response_rate,
+                    y: row.coach_nps,
+                    r: meso3RunnerMap[row.coach],
+                  }))}
+                shape={(props) => {
+                  const { cx, cy, payload } = props;
+                  // Scale runner count: find max for normalization
+                  const maxRunners = Math.max(...sortedTableData.map(r => meso3RunnerMap[r.coach] || 0));
+                  const radius = maxRunners > 0 ? 8 + ((payload.r / maxRunners) * 24) : 12;
+                  let fill = '#f87171';
+                  if (payload.y > 80)      fill = '#166534';
+                  else if (payload.y > 50) fill = '#86efac';
+                  else if (payload.y >= 0) fill = '#fdba74';
+                  return (
+                    <g>
+                      <circle cx={cx} cy={cy} r={radius} fill={fill} fillOpacity={0.75} stroke={fill} strokeWidth={1} />
+                      {radius >= 14 && (
+                        <text
+                          x={cx} y={cy}
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          fontSize={9}
+                          fill="#1f2937"
+                          style={{ pointerEvents: 'none' }}
+                        >
+                          {payload.coach.split(' ')[0]}
+                        </text>
+                      )}
+                    </g>
+                  );
+                }}
+              >
+                {sortedTableData
+                  .filter(row => row.response_rate != null && row.coach_nps != null && meso3RunnerMap[row.coach] != null)
+                  .map((row, i) => <Cell key={i} />)}
+              </Scatter>
+            </ScatterChart>
+          </ResponsiveContainer>
+
+          {/* Legend */}
+          <div className="flex gap-6 justify-center mt-4 text-xs text-gray-500">
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-green-800 opacity-75" /> NPS &gt; 80</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-green-300 opacity-75" /> NPS 51–80</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-orange-300 opacity-75" /> NPS 0–50</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-red-400 opacity-75" /> NPS &lt; 0</span>
+            <span className="flex items-center gap-1 ml-4 text-gray-400 italic">Bubble size = Meso 3 Runner Count</span>
+          </div>
+        </div>
+
       </div>
     </div>
   );
