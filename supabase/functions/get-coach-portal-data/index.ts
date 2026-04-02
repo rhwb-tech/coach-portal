@@ -433,7 +433,7 @@ serve(async (req) => {
           s15Map.set(key, s15Map.has(key) ? mergeNpsRows(s15Map.get(key), row) : row)
         }
 
-        const mergedS15NewReturn = Array.from(s15Map.values())
+        const mergedS15NewReturn = Array.from(s15Map.values()).filter((r: any) => r.runner_status !== 'All')
         const mergedS15All = computeAllRows(mergedS15NewReturn)
 
         finalData = [...nonS15, ...mergedS15NewReturn, ...mergedS15All]

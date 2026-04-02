@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { fetchNPSScores } from '../services/cloudSqlService';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, ChevronRight, ChevronDown } from 'lucide-react';
 import {
   ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip,
   ReferenceLine, ResponsiveContainer, Cell
@@ -34,6 +34,8 @@ export default function CoachBenchmark() {
   const [loading, setLoading] = useState(true);
   const [sortConfig, setSortConfig] = useState({ key: 'coach', dir: 'asc' });
   const [expandedCoach, setExpandedCoach] = useState(null); // coach name
+  const [npsExpanded, setNpsExpanded] = useState(false);
+  const [rhwbExpanded, setRhwbExpanded] = useState(false);
   const [commentsCache, setCommentsCache] = useState({});   // { coachName: { coach: [], rhwb: [], loading: false } }
 
   useEffect(() => {
@@ -190,16 +192,6 @@ export default function CoachBenchmark() {
     return result;
   }, [rlbData]);
 
-  // Build Meso 3 runner count map: coach -> runner_count
-  const meso3RunnerMap = useMemo(() => {
-    const map = {};
-    for (const row of rlbData) {
-      if (row.meso === 'Meso 3') {
-        map[row.coach] = (map[row.coach] || 0) + (Number(row.runner_count) || 0);
-      }
-    }
-    return map;
-  }, [rlbData]);
 
   // Build category map: coach -> { category -> count }
   const categoryMap = useMemo(() => {
@@ -228,6 +220,11 @@ export default function CoachBenchmark() {
         response_rate: Number(row.response_rate_percent) || 0,
         coachNpsSum: null,
         rhwbNpsSum: null,
+        feedbackNpsSum: null,
+        commsNpsSum: null,
+        relNpsSum: null,
+        rhwbCommsNpsSum: null,
+        rhwbKnowledgeNpsSum: null,
         npsWeight: 0,
         npsRespondents: 0,
       };
@@ -245,6 +242,9 @@ export default function CoachBenchmark() {
           response_rate: 0,
           coachNpsSum: null,
           rhwbNpsSum: null,
+          feedbackNpsSum: null,
+          commsNpsSum: null,
+          relNpsSum: null,
           npsWeight: 0,
           npsRespondents: 0,
         };
@@ -253,6 +253,11 @@ export default function CoachBenchmark() {
       const c = coachMap[name];
       c.coachNpsSum = (c.coachNpsSum ?? 0) + Number(row.reco_nps) * w;
       c.rhwbNpsSum = (c.rhwbNpsSum ?? 0) + Number(row.rhwb_reco_nps) * w;
+      if (row.feedback_nps      != null) c.feedbackNpsSum      = (c.feedbackNpsSum      ?? 0) + Number(row.feedback_nps)      * w;
+      if (row.comms_nps         != null) c.commsNpsSum         = (c.commsNpsSum         ?? 0) + Number(row.comms_nps)         * w;
+      if (row.rel_nps           != null) c.relNpsSum           = (c.relNpsSum           ?? 0) + Number(row.rel_nps)           * w;
+      if (row.rhwb_comms_nps    != null) c.rhwbCommsNpsSum    = (c.rhwbCommsNpsSum    ?? 0) + Number(row.rhwb_comms_nps)    * w;
+      if (row.rhwb_knowledge_nps != null) c.rhwbKnowledgeNpsSum = (c.rhwbKnowledgeNpsSum ?? 0) + Number(row.rhwb_knowledge_nps) * w;
       c.npsWeight += w;
       c.npsRespondents += w;
     }
@@ -270,8 +275,13 @@ export default function CoachBenchmark() {
           respondents,
           runners_count,
           response_rate,
-          coach_nps: c.npsWeight > 0 ? Math.round(c.coachNpsSum / c.npsWeight) : null,
-          rhwb_nps: c.npsWeight > 0 ? Math.round(c.rhwbNpsSum / c.npsWeight) : null,
+          coach_nps:         c.npsWeight > 0             ? Math.round(c.coachNpsSum         / c.npsWeight) : null,
+          rhwb_nps:          c.npsWeight > 0             ? Math.round(c.rhwbNpsSum          / c.npsWeight) : null,
+          feedback_nps:      c.feedbackNpsSum      != null ? Math.round(c.feedbackNpsSum      / c.npsWeight) : null,
+          comms_nps:         c.commsNpsSum         != null ? Math.round(c.commsNpsSum         / c.npsWeight) : null,
+          rel_nps:           c.relNpsSum           != null ? Math.round(c.relNpsSum           / c.npsWeight) : null,
+          rhwb_comms_nps:    c.rhwbCommsNpsSum    != null ? Math.round(c.rhwbCommsNpsSum    / c.npsWeight) : null,
+          rhwb_knowledge_nps: c.rhwbKnowledgeNpsSum != null ? Math.round(c.rhwbKnowledgeNpsSum / c.npsWeight) : null,
         };
       })
       .sort((a, b) => a.coach.localeCompare(b.coach));
@@ -303,14 +313,29 @@ export default function CoachBenchmark() {
 
     // NPS: weighted across all npsData rows (true dataset-level NPS, not average of coaches)
     let coachNpsSum = 0, rhwbNpsSum = 0, npsWeight = 0;
+    let feedbackNpsSum = 0, feedbackNpsWeight = 0;
+    let commsNpsSum = 0, commsNpsWeight = 0;
+    let relNpsSum = 0, relNpsWeight = 0;
+    let rhwbCommsNpsSum = 0, rhwbCommsNpsWeight = 0;
+    let rhwbKnowledgeNpsSum = 0, rhwbKnowledgeNpsWeight = 0;
     for (const row of npsData) {
       const w = Number(row.total_responses) || 1;
       coachNpsSum += Number(row.reco_nps) * w;
       rhwbNpsSum  += Number(row.rhwb_reco_nps) * w;
       npsWeight   += w;
+      if (row.feedback_nps       != null) { feedbackNpsSum       += Number(row.feedback_nps)       * w; feedbackNpsWeight       += w; }
+      if (row.comms_nps          != null) { commsNpsSum          += Number(row.comms_nps)          * w; commsNpsWeight          += w; }
+      if (row.rel_nps            != null) { relNpsSum            += Number(row.rel_nps)            * w; relNpsWeight            += w; }
+      if (row.rhwb_comms_nps     != null) { rhwbCommsNpsSum      += Number(row.rhwb_comms_nps)     * w; rhwbCommsNpsWeight      += w; }
+      if (row.rhwb_knowledge_nps != null) { rhwbKnowledgeNpsSum  += Number(row.rhwb_knowledge_nps) * w; rhwbKnowledgeNpsWeight  += w; }
     }
-    const coachNps = npsWeight > 0 ? Math.round(coachNpsSum / npsWeight) : null;
-    const rhwbNps  = npsWeight > 0 ? Math.round(rhwbNpsSum  / npsWeight) : null;
+    const coachNps        = npsWeight > 0              ? Math.round(coachNpsSum        / npsWeight)              : null;
+    const rhwbNps         = npsWeight > 0              ? Math.round(rhwbNpsSum         / npsWeight)              : null;
+    const feedbackNps     = feedbackNpsWeight > 0       ? Math.round(feedbackNpsSum     / feedbackNpsWeight)       : null;
+    const commsNps        = commsNpsWeight > 0          ? Math.round(commsNpsSum        / commsNpsWeight)          : null;
+    const relNps          = relNpsWeight > 0            ? Math.round(relNpsSum          / relNpsWeight)            : null;
+    const rhwbCommsNps    = rhwbCommsNpsWeight > 0      ? Math.round(rhwbCommsNpsSum    / rhwbCommsNpsWeight)      : null;
+    const rhwbKnowledgeNps = rhwbKnowledgeNpsWeight > 0 ? Math.round(rhwbKnowledgeNpsSum / rhwbKnowledgeNpsWeight) : null;
 
     // Feedback ratio: sum raw runs across all coaches/mesos
     let withComments = 0, withoutComments = 0;
@@ -339,7 +364,7 @@ export default function CoachBenchmark() {
     }
     const catTotal = CATEGORY_ORDER.reduce((s, c) => s + (catTotals[c] || 0), 0);
 
-    return { totalRespondents, totalRunners, responseRate, coachNps, rhwbNps, feedbackRatio, rlbByMeso, catTotals, catTotal };
+    return { totalRespondents, totalRunners, responseRate, coachNps, rhwbNps, feedbackNps, commsNps, relNps, rhwbCommsNps, rhwbKnowledgeNps, feedbackRatio, rlbByMeso, catTotals, catTotal };
   }, [tableData, npsData, rlbData, rlbMap, categoryMap]);
 
   const handleSort = (key) => {
@@ -436,25 +461,55 @@ export default function CoachBenchmark() {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
                 {[
-                  { key: 'coach',         label: 'Coach',          align: 'left'   },
-                  { key: 'respondents',   label: 'Respondents',    align: 'center' },
-                  { key: 'runners_count', label: 'Total Runners',  align: 'center' },
-                  { key: null,            label: 'Runners / Meso', align: 'center' },
-                  { key: 'response_rate', label: 'Response Rate',  align: 'center' },
-                  { key: 'coach_nps',     label: 'Coach NPS',      align: 'center' },
-                  { key: 'rhwb_nps',      label: 'RHWB NPS',       align: 'center' },
-                  { key: 'feedback_ratio', label: 'Feedback Ratio', align: 'center' },
+                  { key: 'coach',         label: 'Coach',               align: 'left'   },
+                  { key: 'respondents',   label: 'Respondents',         align: 'center' },
+                  { key: 'runners_count', label: 'Total Runners',       align: 'center' },
+                  { key: null,            label: 'Runners / Meso',      align: 'center' },
+                  { key: 'response_rate', label: 'Response Rate',       align: 'center' },
+                  { key: 'coach_nps',     label: 'Coach NPS',           align: 'center', expandable: true },
+                  ...(npsExpanded ? [
+                    { key: 'feedback_nps', label: 'Feedback',           align: 'center' },
+                    { key: 'comms_nps',    label: 'Comms',              align: 'center' },
+                    { key: 'rel_nps',      label: 'Relationship',       align: 'center' },
+                  ] : []),
+                  { key: 'rhwb_nps',      label: 'RHWB NPS',           align: 'center', expandable: 'rhwb' },
+                  ...(rhwbExpanded ? [
+                    { key: 'rhwb_comms_nps',     label: 'Communication', align: 'center' },
+                    { key: 'rhwb_knowledge_nps', label: 'Knowledge',     align: 'center' },
+                  ] : []),
+                  { key: 'feedback_ratio', label: 'Feedback Ratio',     align: 'center' },
                   { key: null,            label: 'Runners Left Behind', align: 'center' },
                   { key: null,            label: 'Comment Categories',  align: 'center' },
-                ].map(({ key, label, align }) => {
+                ].map(({ key, label, align, expandable }) => {
                   const sortable = !!key;
+                  const isExpandable = !!expandable;
+                  const expanded = expandable === 'rhwb' ? rhwbExpanded : npsExpanded;
+                  const toggleExpand = expandable === 'rhwb'
+                    ? e => { e.stopPropagation(); setRhwbExpanded(v => !v); }
+                    : e => { e.stopPropagation(); setNpsExpanded(v => !v); };
                   return (
                     <th
                       key={label}
-                      onClick={sortable ? () => handleSort(key) : undefined}
-                      className={`px-4 py-3 font-semibold text-gray-700 text-${align} ${sortable ? 'cursor-pointer hover:bg-gray-100 select-none' : ''}`}
+                      onClick={sortable && !isExpandable ? () => handleSort(key) : undefined}
+                      className={`px-4 py-3 font-semibold text-gray-700 text-${align} ${sortable && !isExpandable ? 'cursor-pointer hover:bg-gray-100 select-none' : ''}`}
                     >
-                      {label}{sortable && <SortIcon colKey={key} />}
+                      {isExpandable ? (
+                        <button
+                          onClick={() => handleSort(key)}
+                          className="inline-flex items-center gap-1 cursor-pointer hover:bg-gray-100 select-none w-full justify-center"
+                        >
+                          {label}<SortIcon colKey={key} />
+                          <span
+                            onClick={toggleExpand}
+                            className="ml-1 text-gray-400 hover:text-gray-700"
+                            title={expanded ? 'Hide breakdown' : 'Show breakdown'}
+                          >
+                            {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                          </span>
+                        </button>
+                      ) : (
+                        <>{label}{sortable && <SortIcon colKey={key} />}</>
+                      )}
                     </th>
                   );
                 })}
@@ -490,6 +545,17 @@ export default function CoachBenchmark() {
                         </button>
                       </div>
                     </td>
+                    {npsExpanded && <>
+                      <td className={`px-4 py-3 text-center ${npsCellClass(row.feedback_nps)}`}>
+                        {row.feedback_nps !== null ? row.feedback_nps : '—'}
+                      </td>
+                      <td className={`px-4 py-3 text-center ${npsCellClass(row.comms_nps)}`}>
+                        {row.comms_nps !== null ? row.comms_nps : '—'}
+                      </td>
+                      <td className={`px-4 py-3 text-center ${npsCellClass(row.rel_nps)}`}>
+                        {row.rel_nps !== null ? row.rel_nps : '—'}
+                      </td>
+                    </>}
                     <td className={`px-4 py-3 ${npsCellClass(row.rhwb_nps)}`}>
                       <div className="flex items-center justify-center gap-1">
                         <span>{row.rhwb_nps !== null ? row.rhwb_nps : '—'}</span>
@@ -498,6 +564,14 @@ export default function CoachBenchmark() {
                         </button>
                       </div>
                     </td>
+                    {rhwbExpanded && <>
+                      <td className={`px-4 py-3 text-center ${npsCellClass(row.rhwb_comms_nps)}`}>
+                        {row.rhwb_comms_nps !== null ? row.rhwb_comms_nps : '—'}
+                      </td>
+                      <td className={`px-4 py-3 text-center ${npsCellClass(row.rhwb_knowledge_nps)}`}>
+                        {row.rhwb_knowledge_nps !== null ? row.rhwb_knowledge_nps : '—'}
+                      </td>
+                    </>}
                     <td className={`px-4 py-3 text-center ${feedbackRatioCellClass(feedbackRatio)}`}>
                       {feedbackRatio !== null ? `${feedbackRatio}%` : '—'}
                     </td>
@@ -599,9 +673,18 @@ export default function CoachBenchmark() {
                       {rate !== null ? `${rate}%` : '—'}
                     </td>
                     <td className="px-4 py-3 text-center text-gray-400">—</td>
+                    {npsExpanded && <>
+                      <td className="px-4 py-3 text-center text-gray-400">—</td>
+                      <td className="px-4 py-3 text-center text-gray-400">—</td>
+                      <td className="px-4 py-3 text-center text-gray-400">—</td>
+                    </>}
                     <td className={`px-4 py-3 text-center ${liteRow.rhwb_nps !== null ? npsCellClass(liteRow.rhwb_nps) : 'text-gray-400'}`}>
                       {liteRow.rhwb_nps !== null ? liteRow.rhwb_nps : '—'}
                     </td>
+                    {rhwbExpanded && <>
+                      <td className="px-4 py-3 text-center text-gray-400">—</td>
+                      <td className="px-4 py-3 text-center text-gray-400">—</td>
+                    </>}
                     <td className="px-4 py-3 text-center text-gray-400">—</td>
                     <td className="px-4 py-3 text-center text-gray-400">—</td>
                     <td className="px-4 py-3 text-center text-gray-400">—</td>
@@ -621,9 +704,28 @@ export default function CoachBenchmark() {
                 <td className={`px-4 py-3 text-center ${npsCellClass(footerData.coachNps)}`}>
                   {footerData.coachNps !== null ? footerData.coachNps : '—'}
                 </td>
+                {npsExpanded && <>
+                  <td className={`px-4 py-3 text-center ${npsCellClass(footerData.feedbackNps)}`}>
+                    {footerData.feedbackNps !== null ? footerData.feedbackNps : '—'}
+                  </td>
+                  <td className={`px-4 py-3 text-center ${npsCellClass(footerData.commsNps)}`}>
+                    {footerData.commsNps !== null ? footerData.commsNps : '—'}
+                  </td>
+                  <td className={`px-4 py-3 text-center ${npsCellClass(footerData.relNps)}`}>
+                    {footerData.relNps !== null ? footerData.relNps : '—'}
+                  </td>
+                </>}
                 <td className={`px-4 py-3 text-center ${npsCellClass(footerData.rhwbNps)}`}>
                   {footerData.rhwbNps !== null ? footerData.rhwbNps : '—'}
                 </td>
+                {rhwbExpanded && <>
+                  <td className={`px-4 py-3 text-center ${npsCellClass(footerData.rhwbCommsNps)}`}>
+                    {footerData.rhwbCommsNps !== null ? footerData.rhwbCommsNps : '—'}
+                  </td>
+                  <td className={`px-4 py-3 text-center ${npsCellClass(footerData.rhwbKnowledgeNps)}`}>
+                    {footerData.rhwbKnowledgeNps !== null ? footerData.rhwbKnowledgeNps : '—'}
+                  </td>
+                </>}
                 <td className={`px-4 py-3 text-center ${feedbackRatioCellClass(footerData.feedbackRatio)}`}>
                   {footerData.feedbackRatio !== null ? `${footerData.feedbackRatio}%` : '—'}
                 </td>
@@ -773,7 +875,7 @@ export default function CoachBenchmark() {
           </div>
         </div>
 
-        {/* Bubble Chart 2: Response Rate vs Coach NPS, sized by Meso 3 Runner Count */}
+        {/* Bubble Chart 2: Response Rate vs Coach NPS, sized by Total Runners */}
         <div className="mt-8 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-base font-semibold text-gray-700 mb-1">
             Response Rate vs Coach NPS
@@ -811,24 +913,24 @@ export default function CoachBenchmark() {
                       <p className="font-semibold text-gray-800 mb-1">{d.coach}</p>
                       <p className="text-gray-600">Response Rate: <span className="font-medium">{d.x}%</span></p>
                       <p className="text-gray-600">Coach NPS: <span className="font-medium">{d.y}</span></p>
-                      <p className="text-gray-600">Meso 3 Runners: <span className="font-medium">{d.r}</span></p>
+                      <p className="text-gray-600">Total Runners: <span className="font-medium">{d.r}</span></p>
                     </div>
                   );
                 }}
               />
               <Scatter
                 data={sortedTableData
-                  .filter(row => row.response_rate != null && row.coach_nps != null && meso3RunnerMap[row.coach] != null)
+                  .filter(row => row.response_rate != null && row.coach_nps != null && row.runners_count != null)
                   .map(row => ({
                     coach: row.coach,
                     x: row.response_rate,
                     y: row.coach_nps,
-                    r: meso3RunnerMap[row.coach],
+                    r: row.runners_count,
                   }))}
                 shape={(props) => {
                   const { cx, cy, payload } = props;
                   // Scale runner count: find max for normalization
-                  const maxRunners = Math.max(...sortedTableData.map(r => meso3RunnerMap[r.coach] || 0));
+                  const maxRunners = Math.max(...sortedTableData.map(r => r.runners_count || 0));
                   const radius = maxRunners > 0 ? 8 + ((payload.r / maxRunners) * 24) : 12;
                   let fill = '#f87171';
                   if (payload.y > 80)      fill = '#166534';
@@ -854,7 +956,7 @@ export default function CoachBenchmark() {
                 }}
               >
                 {sortedTableData
-                  .filter(row => row.response_rate != null && row.coach_nps != null && meso3RunnerMap[row.coach] != null)
+                  .filter(row => row.response_rate != null && row.coach_nps != null && row.runners_count != null)
                   .map((row, i) => <Cell key={i} />)}
               </Scatter>
             </ScatterChart>
@@ -866,7 +968,7 @@ export default function CoachBenchmark() {
             <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-green-300 opacity-75" /> NPS 51–80</span>
             <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-orange-300 opacity-75" /> NPS 0–50</span>
             <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-red-400 opacity-75" /> NPS &lt; 0</span>
-            <span className="flex items-center gap-1 ml-4 text-gray-400 italic">Bubble size = Meso 3 Runner Count</span>
+            <span className="flex items-center gap-1 ml-4 text-gray-400 italic">Bubble size = Total Runners</span>
           </div>
         </div>
 
