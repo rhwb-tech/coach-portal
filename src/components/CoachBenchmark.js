@@ -306,9 +306,9 @@ export default function CoachBenchmark() {
   }, [tableData, sortConfig, feedbackRatioMap]);
 
   const footerData = useMemo(() => {
-    // Respondents + runners: sum from tableData
-    const totalRespondents = tableData.reduce((s, r) => s + (r.respondents || 0), 0);
-    const totalRunners     = tableData.reduce((s, r) => s + (r.runners_count || 0), 0);
+    // Respondents + runners: sum from tableData + liteRow
+    const totalRespondents = tableData.reduce((s, r) => s + (r.respondents || 0), 0) + (liteRow?.respondents || 0);
+    const totalRunners     = tableData.reduce((s, r) => s + (r.runners_count || 0), 0) + (liteRow?.runners_count || 0);
     const responseRate = totalRunners > 0 ? Math.round((totalRespondents / totalRunners) * 100) : null;
 
     // NPS: weighted across all npsData rows (true dataset-level NPS, not average of coaches)
@@ -329,8 +329,14 @@ export default function CoachBenchmark() {
       if (row.rhwb_comms_nps     != null) { rhwbCommsNpsSum      += Number(row.rhwb_comms_nps)     * w; rhwbCommsNpsWeight      += w; }
       if (row.rhwb_knowledge_nps != null) { rhwbKnowledgeNpsSum  += Number(row.rhwb_knowledge_nps) * w; rhwbKnowledgeNpsWeight  += w; }
     }
+    // Include Lite RHWB NPS in the weighted average (no coach NPS for Lite)
+    let rhwbNpsTotal = rhwbNpsSum, rhwbNpsTotalWeight = npsWeight;
+    if (liteRow?.rhwb_nps != null && liteRow?.respondents > 0) {
+      rhwbNpsTotal      += Number(liteRow.rhwb_nps) * liteRow.respondents;
+      rhwbNpsTotalWeight += liteRow.respondents;
+    }
     const coachNps        = npsWeight > 0              ? Math.round(coachNpsSum        / npsWeight)              : null;
-    const rhwbNps         = npsWeight > 0              ? Math.round(rhwbNpsSum         / npsWeight)              : null;
+    const rhwbNps         = rhwbNpsTotalWeight > 0      ? Math.round(rhwbNpsTotal       / rhwbNpsTotalWeight)      : null;
     const feedbackNps     = feedbackNpsWeight > 0       ? Math.round(feedbackNpsSum     / feedbackNpsWeight)       : null;
     const commsNps        = commsNpsWeight > 0          ? Math.round(commsNpsSum        / commsNpsWeight)          : null;
     const relNps          = relNpsWeight > 0            ? Math.round(relNpsSum          / relNpsWeight)            : null;
@@ -365,7 +371,7 @@ export default function CoachBenchmark() {
     const catTotal = CATEGORY_ORDER.reduce((s, c) => s + (catTotals[c] || 0), 0);
 
     return { totalRespondents, totalRunners, responseRate, coachNps, rhwbNps, feedbackNps, commsNps, relNps, rhwbCommsNps, rhwbKnowledgeNps, feedbackRatio, rlbByMeso, catTotals, catTotal };
-  }, [tableData, npsData, rlbData, rlbMap, categoryMap]);
+  }, [tableData, npsData, rlbData, rlbMap, categoryMap, liteRow]);
 
   const handleSort = (key) => {
     setSortConfig(prev =>
@@ -376,8 +382,8 @@ export default function CoachBenchmark() {
   };
 
   const SortIcon = ({ colKey }) => {
-    if (sortConfig.key !== colKey) return <span className="ml-1 text-gray-300">↕</span>;
-    return <span className="ml-1">{sortConfig.dir === 'asc' ? '↑' : '↓'}</span>;
+    if (sortConfig.key !== colKey) return <span className="ml-1 text-blue-900">↕</span>;
+    return <span className="ml-1 text-blue-900">{sortConfig.dir === 'asc' ? '↑' : '↓'}</span>;
   };
 
   const npsCellClass = (score) => {
@@ -501,7 +507,7 @@ export default function CoachBenchmark() {
                           {label}<SortIcon colKey={key} />
                           <span
                             onClick={toggleExpand}
-                            className="ml-1 text-gray-400 hover:text-gray-700"
+                            className="ml-1 text-blue-900 hover:text-blue-700"
                             title={expanded ? 'Hide breakdown' : 'Show breakdown'}
                           >
                             {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
