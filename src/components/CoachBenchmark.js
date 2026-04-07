@@ -123,7 +123,7 @@ export default function CoachBenchmark() {
       }
     };
     load();
-  }, [isCoachRole, user?.email]);
+  }, [isCoachRole, user?.email, user?.name]);
 
   // Build RLB map: coach -> { meso -> count }
   const rlbMap = useMemo(() => {
