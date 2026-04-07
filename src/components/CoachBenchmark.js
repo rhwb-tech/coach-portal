@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { fetchNPSScores } from '../services/cloudSqlService';
+import { useAuth } from '../contexts/AuthContext';
 import { MessageSquare, ChevronRight, ChevronDown } from 'lucide-react';
 import {
   ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -26,6 +27,8 @@ const CATEGORY_ORDER = [
 ];
 
 export default function CoachBenchmark() {
+  const { user } = useAuth();
+  const isCoachRole = user?.role?.toLowerCase() === 'coach';
   const [surveyData, setSurveyData] = useState([]);
   const [npsData, setNpsData] = useState([]);
   const [rlbData, setRlbData] = useState([]);
@@ -305,8 +308,13 @@ export default function CoachBenchmark() {
     });
   }, [tableData, sortConfig, feedbackRatioMap]);
 
+  const visibleTableData = useMemo(() => {
+    if (!isCoachRole) return sortedTableData;
+    return sortedTableData.filter(row => row.coach === user?.name);
+  }, [sortedTableData, isCoachRole, user?.name]);
+
   const footerData = useMemo(() => {
-    // Respondents + runners: sum from tableData + liteRow
+    // Respondents + runners: sum from tableData + liteRow (always all coaches, not filtered)
     const totalRespondents = tableData.reduce((s, r) => s + (r.respondents || 0), 0) + (liteRow?.respondents || 0);
     const totalRunners     = tableData.reduce((s, r) => s + (r.runners_count || 0), 0) + (liteRow?.runners_count || 0);
     const responseRate = totalRunners > 0 ? Math.round((totalRespondents / totalRunners) * 100) : null;
@@ -522,7 +530,7 @@ export default function CoachBenchmark() {
               </tr>
             </thead>
             <tbody>
-              {sortedTableData.map((row, i) => {
+              {visibleTableData.map((row, i) => {
                 const coachRlb = rlbMap[row.coach] || {};
                 const feedbackRatio = feedbackRatioMap[row.coach] ?? null;
                 const coachCats = categoryMap[row.coach] || {};
@@ -828,7 +836,7 @@ export default function CoachBenchmark() {
               />
 
               <Scatter
-                data={sortedTableData
+                data={visibleTableData
                   .filter(row => row.response_rate != null && row.coach_nps != null && row.feedback_ratio != null)
                   .map(row => ({
                     coach: row.coach,
@@ -864,7 +872,7 @@ export default function CoachBenchmark() {
                   );
                 }}
               >
-                {sortedTableData
+                {visibleTableData
                   .filter(row => row.response_rate != null && row.coach_nps != null && row.feedback_ratio != null)
                   .map((row, i) => <Cell key={i} />)}
               </Scatter>
@@ -925,7 +933,7 @@ export default function CoachBenchmark() {
                 }}
               />
               <Scatter
-                data={sortedTableData
+                data={visibleTableData
                   .filter(row => row.response_rate != null && row.coach_nps != null && row.runners_count != null)
                   .map(row => ({
                     coach: row.coach,
@@ -936,7 +944,7 @@ export default function CoachBenchmark() {
                 shape={(props) => {
                   const { cx, cy, payload } = props;
                   // Scale runner count: find max for normalization
-                  const maxRunners = Math.max(...sortedTableData.map(r => r.runners_count || 0));
+                  const maxRunners = Math.max(...visibleTableData.map(r => r.runners_count || 0));
                   const radius = maxRunners > 0 ? 8 + ((payload.r / maxRunners) * 24) : 12;
                   let fill = '#f87171';
                   if (payload.y > 80)      fill = '#166534';
@@ -961,7 +969,7 @@ export default function CoachBenchmark() {
                   );
                 }}
               >
-                {sortedTableData
+                {visibleTableData
                   .filter(row => row.response_rate != null && row.coach_nps != null && row.runners_count != null)
                   .map((row, i) => <Cell key={i} />)}
               </Scatter>

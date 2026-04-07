@@ -1360,22 +1360,20 @@ const CoachDashboard = () => {
                 <span>NPS Scores</span>
               </button>
 
-              {isAdmin() && (
-                <button
-                  onClick={() => {
-                    updateCurrentView('coach-benchmark');
-                    setHamburgerMenuOpen(false);
-                  }}
-                  className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
-                    currentView === 'coach-benchmark'
-                      ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                      : 'text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <TrendingUp className="h-4 w-4" />
-                  <span>Coach Benchmark</span>
-                </button>
-              )}
+              <button
+                onClick={() => {
+                  updateCurrentView('coach-benchmark');
+                  setHamburgerMenuOpen(false);
+                }}
+                className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
+                  currentView === 'coach-benchmark'
+                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <TrendingUp className="h-4 w-4" />
+                <span>Coach Benchmark</span>
+              </button>
 
               {isAdmin() && (
                 <div className="relative admin-menu-container">
@@ -1633,22 +1631,20 @@ const CoachDashboard = () => {
               <span>NPS Scores</span>
             </button>
 
-            {isAdmin() && (
-              <button
-                onClick={() => {
-                  updateCurrentView('coach-benchmark');
-                  setHamburgerMenuOpen(false);
-                }}
-                className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
-                  currentView === 'coach-benchmark'
-                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                    : 'text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <TrendingUp className="h-4 w-4" />
-                <span>Coach Benchmark</span>
-              </button>
-            )}
+            <button
+              onClick={() => {
+                updateCurrentView('coach-benchmark');
+                setHamburgerMenuOpen(false);
+              }}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
+                currentView === 'coach-benchmark'
+                  ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                  : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <TrendingUp className="h-4 w-4" />
+              <span>Coach Benchmark</span>
+            </button>
 
             {isAdmin() && (
               <div className="relative admin-menu-container">
@@ -2009,7 +2005,7 @@ const CoachDashboard = () => {
         <CoachInsights />
       ) : currentView === 'nps-scores' ? (
         <NPSScores />
-      ) : currentView === 'coach-benchmark' && isAdmin() ? (
+      ) : currentView === 'coach-benchmark' ? (
         <CoachBenchmark />
       ) : currentView === 'club-nps-scores' ? (
         <ClubNPSScores />
