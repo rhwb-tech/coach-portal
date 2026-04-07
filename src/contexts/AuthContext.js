@@ -69,13 +69,12 @@ const validateEmailAccess = async (email) => {
       
       if (error.message?.includes('timeout')) {
         const fallbackRole = determineUserRole(email);
-        saveSessionUserRole(email, fallbackRole);
+        // Do not cache fallback role — let next load re-query the DB for the real role
         return { isValid: true, role: fallbackRole };
       }
-      
-      // For any other error, use fallback
+
+      // For any other error, use fallback without caching
       const fallbackRole = determineUserRole(email);
-      saveSessionUserRole(email, fallbackRole);
       return { isValid: true, role: fallbackRole };
     }
 
@@ -91,9 +90,8 @@ const validateEmailAccess = async (email) => {
     return { isValid: true, role: data.role, fullName: data.full_name };
 
   } catch (error) {
-    // If we can't validate due to database issues, fall back to email-based role
+    // If we can't validate due to database issues, fall back without caching
     const fallbackRole = determineUserRole(email);
-    saveSessionUserRole(email, fallbackRole);
     return { isValid: true, role: fallbackRole };
   }
 };
@@ -219,17 +217,10 @@ const validateUrlOverride = async (overrideEmail, hasActiveSession = false) => {
     };
   }
   
-  // First, check if we have a valid override role already stored
-  const overrideRole = getOverrideUserRole(overrideEmail);
-  if (overrideRole) {
-    return { isValid: true, role: overrideRole.role, fromOverride: true };
-  }
-  
-  // If no stored override role, validate against database
+  // Always validate override email against DB to ensure we get the correct role
   const validation = await validateEmailAccess(overrideEmail);
-  
+
   if (validation.isValid && validation.role) {
-    // Save the valid override role for future use
     saveOverrideUserRole(overrideEmail, validation.role);
     return validation;
   } else {
