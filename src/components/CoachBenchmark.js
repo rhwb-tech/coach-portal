@@ -29,6 +29,7 @@ const CATEGORY_ORDER = [
 export default function CoachBenchmark() {
   const { user } = useAuth();
   const isCoachRole = user?.role?.toLowerCase() === 'coach';
+  const [coachFullName, setCoachFullName] = useState(null);
   const [surveyData, setSurveyData] = useState([]);
   const [npsData, setNpsData] = useState([]);
   const [rlbData, setRlbData] = useState([]);
@@ -45,6 +46,16 @@ export default function CoachBenchmark() {
     const load = async () => {
       setLoading(true);
       try {
+        // Resolve full name for coach role (user.name may be email if cached override)
+        if (isCoachRole && user?.email) {
+          const { data: roleData } = await supabase
+            .from('v_rhwb_roles')
+            .select('full_name')
+            .eq('email_id', user.email.toLowerCase())
+            .maybeSingle();
+          setCoachFullName(roleData?.full_name || user.name || user.email);
+        }
+
         const [surveyResult, npsResult, rlbResult, categoryResult] = await Promise.all([
           supabase
             .from('v_survey_response_rate')
@@ -112,7 +123,7 @@ export default function CoachBenchmark() {
       }
     };
     load();
-  }, []);
+  }, [isCoachRole, user?.email]);
 
   // Build RLB map: coach -> { meso -> count }
   const rlbMap = useMemo(() => {
@@ -310,8 +321,8 @@ export default function CoachBenchmark() {
 
   const visibleTableData = useMemo(() => {
     if (!isCoachRole) return sortedTableData;
-    return sortedTableData.filter(row => row.coach === user?.name);
-  }, [sortedTableData, isCoachRole, user?.name]);
+    return sortedTableData.filter(row => row.coach === coachFullName);
+  }, [sortedTableData, isCoachRole, coachFullName]);
 
   const footerData = useMemo(() => {
     // Respondents + runners: sum from tableData + liteRow (always all coaches, not filtered)
@@ -675,7 +686,7 @@ export default function CoachBenchmark() {
                   </React.Fragment>
                 );
               })}
-              {liteRow && (() => {
+              {liteRow && !isCoachRole && (() => {
                 const rate = liteRow.response_rate;
                 return (
                   <tr className="bg-blue-50 border-t border-blue-200 italic">
