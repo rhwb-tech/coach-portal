@@ -151,25 +151,6 @@ const clearSessionUserRole = () => {
   }
 };
 
-// Helper function to get override user role
-const getOverrideUserRole = (email) => {
-  try {
-    const overrideEmail = sessionStorage.getItem(OVERRIDE_KEYS.USER_EMAIL);
-    const overrideRole = sessionStorage.getItem(OVERRIDE_KEYS.USER_ROLE);
-    const overrideStart = sessionStorage.getItem(OVERRIDE_KEYS.OVERRIDE_START);
-
-    // Check if override role is valid for this email
-    if (overrideEmail === email && overrideRole && overrideStart) {
-      return { role: overrideRole, fromOverride: true };
-    }
-    
-    return null; // No valid override role
-  } catch (error) {
-    console.error('Error reading override role:', error);
-    return null;
-  }
-};
-
 // Helper function to save override user role
 const saveOverrideUserRole = (email, role) => {
   try {
