@@ -78,6 +78,10 @@ const KnowYourRunner = ({
   });
   const [raceTimingsMessage, setRaceTimingsMessage] = useState({ type: '', text: '' });
   const [raceTimingsValidation, setRaceTimingsValidation] = useState({ race_timings: '' });
+  const [recentActivities, setRecentActivities] = useState([]);
+  const [recentActivitiesLoading, setRecentActivitiesLoading] = useState(false);
+  const [recentActivitiesOffset, setRecentActivitiesOffset] = useState(0);
+  const [recentActivitiesHasMore, setRecentActivitiesHasMore] = useState(false);
   
   // Admin role toggle state - use prop if provided, otherwise use local state
   const [adminRoleEnabledLocal, setAdminRoleEnabledLocal] = useState(false);
@@ -401,6 +405,49 @@ const KnowYourRunner = ({
     }
   };
 
+  // Fetch recent activities for a runner (used to populate race timings)
+  const fetchRecentActivities = async (runnerEmail, offset = 0) => {
+    if (!runnerEmail || !selectedSeason) return;
+
+    setRecentActivitiesLoading(true);
+
+    // Extract numeric season number from "Season 15" format
+    const seasonStr = selectedSeason.toString();
+    const seasonNo = seasonStr.startsWith('Season ')
+      ? parseInt(seasonStr.replace('Season ', ''), 10)
+      : parseInt(seasonStr, 10);
+
+    if (isNaN(seasonNo)) {
+      setRecentActivitiesLoading(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('rhwb_activities')
+        .select('workout_date, completed_distance, completed_time')
+        .eq('email_id', runnerEmail.toLowerCase())
+        .eq('season_no', seasonNo)
+        .in('activity', ['RUN', 'WALK', 'LONG-RUN'])
+        .not('completed_distance', 'is', null)
+        .order('completed_distance', { ascending: false })
+        .range(offset, offset + 4);
+
+      if (error) {
+        console.error('Error fetching recent activities:', error);
+      } else {
+        const rows = data || [];
+        setRecentActivities(prev => offset === 0 ? rows : [...prev, ...rows]);
+        setRecentActivitiesOffset(offset + rows.length);
+        setRecentActivitiesHasMore(rows.length === 5);
+      }
+    } catch (error) {
+      console.error('Error in fetchRecentActivities:', error);
+    } finally {
+      setRecentActivitiesLoading(false);
+    }
+  };
+
   // Handle edit button click
   // eslint-disable-next-line no-unused-vars
   const handleEditMeso = (mesoData) => {
@@ -511,6 +558,9 @@ const KnowYourRunner = ({
   const handleEditRaceTimings = () => {
     setEditingRaceTimings(true);
     setRaceTimingsMessage({ type: '', text: '' });
+    if (selectedRunner?.email_id) {
+      fetchRecentActivities(selectedRunner.email_id);
+    }
   };
 
   // Handle race timings form changes
@@ -586,6 +636,9 @@ const KnowYourRunner = ({
 
       // Reset edit state
       setEditingRaceTimings(false);
+      setRecentActivities([]);
+      setRecentActivitiesOffset(0);
+      setRecentActivitiesHasMore(false);
       setRaceTimingsMessage({ type: 'success', text: 'Race timings updated successfully!' });
       
       // Clear message after 3 seconds
@@ -603,6 +656,9 @@ const KnowYourRunner = ({
     setEditingRaceTimings(false);
     setRaceTimingsMessage({ type: '', text: '' });
     setRaceTimingsValidation({ race_timings: '' });
+    setRecentActivities([]);
+    setRecentActivitiesOffset(0);
+    setRecentActivitiesHasMore(false);
     // Reset form data to original values
     setRaceTimingsFormData({
       race_timings: raceTimings?.race_timings || '',
@@ -1799,6 +1855,60 @@ const KnowYourRunner = ({
 
                               {/* Race Timings Form */}
                               <div className="space-y-4">
+                                {/* Recent Activities Picker (edit mode only) */}
+                                {editingRaceTimings && (
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Recent Activities — click to use as race timing</label>
+                                    {recentActivitiesLoading ? (
+                                      <div className="text-sm text-gray-500 italic">Loading recent activities...</div>
+                                    ) : recentActivities.length === 0 ? (
+                                      <div className="text-sm text-gray-400 italic">No recent run/walk activities found for this season.</div>
+                                    ) : (
+                                      <div className="flex flex-col gap-1">
+                                        {recentActivities.map((act, idx, arr) => {
+                                          // completed_time is stored as decimal seconds (e.g. "1424.163")
+                                          const secValue = parseFloat(act.completed_time);
+                                          let displayTime = act.completed_time;
+                                          let formTime = act.completed_time;
+                                          if (!isNaN(secValue)) {
+                                            const totalSec = Math.round(secValue);
+                                            const hh = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+                                            const mm = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+                                            const ss = String(totalSec % 60).padStart(2, '0');
+                                            displayTime = `${hh}:${mm}:${ss}`;
+                                            formTime = displayTime;
+                                          }
+                                          const distanceMi = act.completed_distance
+                                            ? `${parseFloat(act.completed_distance).toFixed(2)} mi`
+                                            : '';
+                                          return (
+                                            <button
+                                              key={idx}
+                                              type="button"
+                                              onClick={() => handleRaceTimingsFormChange('race_timings', formTime)}
+                                              className="flex items-center justify-between w-full text-left px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors text-sm"
+                                            >
+                                              <span className="text-gray-700">{act.workout_date}</span>
+                                              {distanceMi && <span className="text-gray-500">{distanceMi}</span>}
+                                              <span className="font-mono font-medium text-blue-700">{displayTime}</span>
+                                            </button>
+                                          );
+                                        })}
+                                        {recentActivitiesHasMore && (
+                                          <button
+                                            type="button"
+                                            onClick={() => fetchRecentActivities(selectedRunner.email_id, recentActivitiesOffset)}
+                                            disabled={recentActivitiesLoading}
+                                            className="w-full text-center text-sm text-blue-600 hover:text-blue-800 py-1.5 border border-dashed border-blue-200 rounded-lg hover:border-blue-400 transition-colors disabled:opacity-50"
+                                          >
+                                            {recentActivitiesLoading ? 'Loading...' : 'Show 5 more activities'}
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
                                 {/* Race Timings, PR, and Race Distance in same row */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                   {/* Race Timings */}
