@@ -558,6 +558,9 @@ const KnowYourRunner = ({
   const handleEditRaceTimings = () => {
     setEditingRaceTimings(true);
     setRaceTimingsMessage({ type: '', text: '' });
+    setRecentActivities([]);
+    setRecentActivitiesOffset(0);
+    setRecentActivitiesHasMore(false);
     if (selectedRunner?.email_id) {
       fetchRecentActivities(selectedRunner.email_id);
     }
@@ -726,6 +729,11 @@ const KnowYourRunner = ({
       setExpandedSections({});
       setSeasonMetrics(null); // Clear previous runner's metrics
     }
+    // Always clear recent activities when switching runners
+    setEditingRaceTimings(false);
+    setRecentActivities([]);
+    setRecentActivitiesOffset(0);
+    setRecentActivitiesHasMore(false);
   };
 
   // Handle menu toggle
