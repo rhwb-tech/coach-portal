@@ -425,7 +425,7 @@ const KnowYourRunner = ({
     try {
       const { data, error } = await supabase
         .from('rhwb_activities')
-        .select('workout_date, completed_distance, completed_time')
+        .select('workout_date, completed_distance, moving_time, completed_time')
         .eq('email_id', runnerEmail.toLowerCase())
         .eq('season_no', seasonNo)
         .in('activity', ['RUN', 'WALK', 'LONG-RUN'])
@@ -1866,10 +1866,11 @@ const KnowYourRunner = ({
                                     ) : (
                                       <div className="flex flex-col gap-1">
                                         {recentActivities.map((act, idx, arr) => {
-                                          // completed_time is stored as decimal seconds (e.g. "1424.163")
-                                          const secValue = parseFloat(act.completed_time);
-                                          let displayTime = act.completed_time;
-                                          let formTime = act.completed_time;
+                                          // moving_time preferred; fall back to completed_time if null
+                                          const rawTime = act.moving_time ?? act.completed_time;
+                                          const secValue = parseFloat(rawTime);
+                                          let displayTime = rawTime;
+                                          let formTime = rawTime;
                                           if (!isNaN(secValue)) {
                                             const totalSec = Math.round(secValue);
                                             const hh = String(Math.floor(totalSec / 3600)).padStart(2, '0');
