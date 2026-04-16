@@ -1874,8 +1874,8 @@ const KnowYourRunner = ({
                                     ) : (
                                       <div className="flex flex-col gap-1">
                                         {recentActivities.map((act, idx, arr) => {
-                                          // moving_time preferred; fall back to completed_time if null
-                                          const rawTime = act.moving_time ?? act.completed_time;
+                                          // completed_time preferred; fall back to moving_time if null
+                                          const rawTime = act.completed_time ?? act.moving_time;
                                           const secValue = parseFloat(rawTime);
                                           let displayTime = rawTime;
                                           let formTime = rawTime;
