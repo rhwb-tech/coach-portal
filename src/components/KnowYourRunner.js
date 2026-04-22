@@ -430,7 +430,7 @@ const KnowYourRunner = ({
         .eq('season_no', seasonNo)
         .in('activity', ['RUN', 'WALK', 'LONG-RUN'])
         .not('completed_distance', 'is', null)
-        .order('completed_distance', { ascending: false })
+        .order('workout_date', { ascending: false })
         .range(offset, offset + 4);
 
       if (error) {
