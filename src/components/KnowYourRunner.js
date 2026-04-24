@@ -1960,7 +1960,7 @@ const KnowYourRunner = ({
                                           className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                                         />
                                         <span className="text-sm text-gray-700">
-                                          {raceTimingsFormData.race_pr ? 'Yes, this is a PR' : 'No, not a PR'}
+                                          If its a PR, check this box
                                         </span>
                                       </div>
                                     ) : (
